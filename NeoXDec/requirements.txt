@@ -1,0 +1,5 @@
+lz4>=4.0.0
+numpy>=1.20.0
+pycryptodome>=3.18.0
+xdis==6.1.7
+uncompyle6==3.9.3
