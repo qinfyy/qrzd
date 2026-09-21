@@ -125,19 +125,22 @@ def load_config() -> dict[str, object]:
     if not 1 <= http_port <= 65535:
         raise ValueError("HTTP_URL_BASE 的端口必须在 1 到 65535 之间")
 
-    gateway_public_key = ""
-    if values["GATEWAY_PUBLIC_KEY_FILE"]:
+    gateway_public_key = settings.get("GATEWAY_PUBLIC_KEY", "").strip()
+    if not gateway_public_key and values.get("GATEWAY_PUBLIC_KEY_FILE"):
         key_path = (PROJECT_DIRECTORY / values["GATEWAY_PUBLIC_KEY_FILE"]).resolve()
         gateway_public_key = key_path.read_text(encoding="ascii").strip()
-        lines = gateway_public_key.splitlines()
+
+    if gateway_public_key:
+        lines = [line.strip() for line in gateway_public_key.splitlines() if line.strip()]
         if len(lines) < 3 or lines[0] != "-----BEGIN PUBLIC KEY-----" or lines[-1] != "-----END PUBLIC KEY-----":
-            raise ValueError("GATEWAY_PUBLIC_KEY_FILE 必须是本地 Gateway 的 PEM 公钥，不能填写私钥")
+            raise ValueError("GATEWAY_PUBLIC_KEY / GATEWAY_PUBLIC_KEY_FILE 必须是本地 Gateway 的 PEM 公钥，不能填写私钥")
         try:
             decoded = base64.b64decode("".join(lines[1:-1]), validate=True)
         except ValueError as error:
             raise ValueError("Gateway PEM 公钥编码无效") from error
         if not 128 <= len(decoded) <= 8192:
             raise ValueError("Gateway PEM 公钥长度无效")
+        gateway_public_key = "\n".join(lines)
 
     return {
         "httpUrlBase": f"http://{parsed_url.netloc}",

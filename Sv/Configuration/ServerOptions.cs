@@ -9,6 +9,7 @@ public sealed class ServerOptions
     public int HttpPort { get; init; } = 21000;
     public string AdvertiseHost { get; init; } = "127.0.0.1";
     public int GatewayPort { get; init; } = 4120;
+    public string GatewayPrivateKeyPath { get; init; } = "ServerData/gateway_private.pem";
     public int GatewayMaxConnections { get; init; } = 32;
     public int GatewayMaxFrameBytes { get; init; } = 65536;
     public int GatewayHandshakeSeconds { get; init; } = 30;
@@ -47,6 +48,8 @@ public sealed class ServerOptions
         if (GatewayMaxConnections is < 1 or > 256 || GatewayMaxFrameBytes is < 1024 or > 1048576 ||
             GatewayHandshakeSeconds is < 1 or > 300 || GatewayIdleSeconds is < 10 or > 3600)
             throw new InvalidOperationException("Gateway 容量、帧大小或超时配置无效");
+        if (string.IsNullOrWhiteSpace(GatewayPrivateKeyPath))
+            throw new InvalidOperationException("GatewayPrivateKeyPath 不能为空");
         if (HostId <= 0 || ServerId <= 0 || string.IsNullOrWhiteSpace(ServerName) ||
             ServerName.Any(char.IsWhiteSpace) || ServerName.Contains('#'))
         {

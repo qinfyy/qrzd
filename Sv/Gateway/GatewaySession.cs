@@ -15,8 +15,12 @@ public sealed class GatewaySession(
     long connectionId, GatewayConnection connection, GatewayKeys keys, LocalAccounts accounts,
     ServerOptions options)
 {
-    private static readonly string[] MethodNames = ["login", "loginWithUrs", "heartbeatServer", "syncServerTime",
-        "uploadDeviceInfo", "logCheckCheat", "uploadTouchHistory", "uploadLocation"];
+    private static readonly string[] MethodNames =
+    [
+        "login", "loginWithUrs", "heartbeatServer", "syncServerTime",
+        "uploadDeviceInfo", "logCheckCheat", "uploadTouchHistory", "uploadLocation",
+        "reliableRpcCall", "pullEvents", "syncAllIntelligenceRequest", "logout",
+    ];
     private static readonly Dictionary<string, string> Methods = MethodNames.ToDictionary(
         name => Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(name))), StringComparer.Ordinal);
     private readonly ByteString accountEntityId = ByteString.CopyFrom(ObjectId.GenerateNewId().ToByteArray());
@@ -147,6 +151,67 @@ public sealed class GatewaySession(
             await SendEntityAsync(avatarEntityId, "on_heartbeat", new BsonDocument(), cancellationToken);
             if (Stage != "online") Log.Information("Gateway {ConnectionId} 收到角色心跳，基础登录已完成 UID={UserId}", connectionId, account.UserId);
             Stage = "online";
+        }
+        else if (method == "syncServerTime")
+        {
+            await SendEntityAsync(avatarEntityId, "onSyncServerTime",
+                new BsonDocument { ["t"] = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds() }, cancellationToken);
+        }
+        else if (method == "syncAllIntelligenceRequest")
+        {
+            await SendEntityAsync(avatarEntityId, "syncAllIntelligence",
+                new BsonDocument
+                {
+                    ["is"] = new BsonDocument
+                    {
+                        ["is"] = new BsonArray(),
+                        ["rd"] = false,
+                    },
+                }, cancellationToken);
+        }
+        else if (method == "pullEvents")
+        {
+            BsonDocument args = ReadArguments(message);
+            int cbid = args.GetValue("_cbid_", 0).AsInt32;
+            BsonDocument reply = new()
+            {
+                ["a"] = new BsonArray(),
+                ["p"] = new BsonArray(),
+            };
+            if (cbid != 0) reply["_cbid_"] = cbid;
+            await SendEntityAsync(avatarEntityId, "pullEventsReply", reply, cancellationToken);
+        }
+        else if (method == "reliableRpcCall")
+        {
+            BsonDocument args = ReadArguments(message);
+            if (args.TryGetValue("w", out BsonValue? wVal) && wVal.IsBsonDocument)
+            {
+                BsonDocument wrapper = wVal.AsBsonDocument;
+                string? subMethod = wrapper.GetValue("m", null)?.AsString;
+                int rpcSeq = wrapper.GetValue("r", 0).AsInt32;
+                int cbid = args.GetValue("_cbid_", 0).AsInt32;
+                if (cbid == 0 && wrapper.TryGetValue("p", out BsonValue? pVal) && pVal.IsBsonDocument)
+                {
+                    cbid = pVal.AsBsonDocument.GetValue("_cbid_", 0).AsInt32;
+                }
+
+                await SendEntityAsync(avatarEntityId, "reliableRpcAck", new BsonDocument { ["s"] = rpcSeq }, cancellationToken);
+
+                if (subMethod == "pullEvents")
+                {
+                    BsonDocument reply = new()
+                    {
+                        ["a"] = new BsonArray(),
+                        ["p"] = new BsonArray(),
+                    };
+                    if (cbid != 0) reply["_cbid_"] = cbid;
+                    await SendEntityAsync(avatarEntityId, "pullEventsReply", reply, cancellationToken);
+                }
+                else
+                {
+                    Log.Debug("Gateway {ConnectionId} reliableRpcCall 未专门处理子方法 {SubMethod}", connectionId, subMethod);
+                }
+            }
         }
         else
         {
