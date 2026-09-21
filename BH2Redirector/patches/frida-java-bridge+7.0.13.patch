@@ -1,0 +1,48 @@
+diff --git a/node_modules/frida-java-bridge/lib/android.js b/node_modules/frida-java-bridge/lib/android.js
+index 11daebe..51f60d2 100644
+--- a/node_modules/frida-java-bridge/lib/android.js
++++ b/node_modules/frida-java-bridge/lib/android.js
+@@ -522,6 +522,10 @@ function _getApi () {
+     let cachedJvmti = null;
+     Object.defineProperty(temporaryApi, 'jvmti', {
+       get () {
++        // Android 15 x86 的 EnsurePluginLoaded ABI 不稳定，避免触发内部 ART/JVMTI。
++        if (Process.arch === 'ia32') {
++          return null;
++        }
+         if (cachedJvmti === null) {
+           cachedJvmti = [tryGetEnvJvmti(vm, this.artRuntime)];
+         }
+diff --git a/node_modules/frida-java-bridge/lib/class-model.js b/node_modules/frida-java-bridge/lib/class-model.js
+index 28b68b0..3b0e74c 100644
+--- a/node_modules/frida-java-bridge/lib/class-model.js
++++ b/node_modules/frida-java-bridge/lib/class-model.js
+@@ -1360,8 +1360,8 @@ function compileModule (env) {
+     if (jvmti !== null) {
+       artClassOffsets = [0, 0, 0, 0];
+     } else {
+-      const c = getArtClassSpec(vm).offset;
+-      artClassOffsets = [c.ifields, c.methods, c.sfields, c.copiedMethodsOffset];
++      const c = (Process.arch === 'ia32') ? null : getArtClassSpec(vm).offset;
++      artClassOffsets = (c === null) ? [0, 0, 0, 0] : [c.ifields, c.methods, c.sfields, c.copiedMethodsOffset];
+     }
+ 
+     const m = getArtMethodSpec(vm);
+@@ -1369,7 +1369,7 @@ function compileModule (env) {
+ 
+     let s = artApi;
+     [
+-      1,
++      (Process.arch === 'ia32') ? 0 : 1,
+       ...artClassOffsets,
+       m.size, m.offset.accessFlags,
+       f.size, f.offset.accessFlags,
+@@ -1421,7 +1421,7 @@ function compileModule (env) {
+ function makeHandleUnwrapper (cm, vm) {
+   const api = getApi();
+ 
+-  if (api.flavor !== 'art') {
++  if (api.flavor !== 'art' || Process.arch === 'ia32') {
+     return nullUnwrap;
+   }
+ 
