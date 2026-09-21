@@ -1,12 +1,24 @@
 using System.Globalization;
+using System.Text;
 using CsvHelper;
 using CsvHelper.Configuration;
 using Sv.Configuration;
 
 namespace Sv.Http;
 
-public static class BootstrapResponses
+public static class DispatchEndpoints
 {
+    public static void MapDispatchEndpoints(this WebApplication app)
+    {
+        app.MapMethods("/server_list_android.txt", [HttpMethods.Get, HttpMethods.Head], () => Results.Text(ServerList(Config.Server), "text/plain", Encoding.UTF8));
+        app.MapMethods("/announcement_android", [HttpMethods.Get, HttpMethods.Head], AnnouncementResult);
+        app.MapMethods("/announcement_other", [HttpMethods.Get, HttpMethods.Head], AnnouncementResult);
+        app.MapAccountEndpoints();
+    }
+
+    private static IResult AnnouncementResult() => Results.Text(
+        Announcement(Config.Server), "text/plain", Encoding.UTF8);
+
     public static string ServerList(ServerOptions options)
     {
         string address = $"{options.AdvertiseHost}:{options.GatewayPort}";

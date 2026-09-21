@@ -1,246 +1,389 @@
 using System.Buffers.Binary;
+using System.Net.Sockets;
 using System.Security.Cryptography;
-using System.Text;
 using Google.Protobuf;
+using ICSharpCode.SharpZipLib.Zip.Compression;
 using MongoDB.Bson;
-using MongoDB.Bson.Serialization;
+using Org.BouncyCastle.Crypto.Engines;
 using Serilog;
 using Sv.Configuration;
+using Sv.Game;
+using Sv.Gateway.Packets;
 using Sv.Gateway.Protocol;
-using ProtoVoid = Sv.Gateway.Protocol.Void;
 
 namespace Sv.Gateway;
 
-public sealed class GatewaySession(
-    long connectionId, GatewayConnection connection, GatewayKeys keys, LocalAccounts accounts,
-    ServerOptions options)
+public readonly record struct GatewayFrame(ushort Method, byte[] Payload);
+
+/// <summary>
+/// 网关客户端会话。
+/// </summary>
+public sealed class GatewaySession
 {
-    private static readonly string[] MethodNames =
-    [
-        "login", "loginWithUrs", "heartbeatServer", "syncServerTime",
-        "uploadDeviceInfo", "logCheckCheat", "uploadTouchHistory", "uploadLocation",
-        "reliableRpcCall", "pullEvents", "syncAllIntelligenceRequest", "logout",
-    ];
-    private static readonly Dictionary<string, string> Methods = MethodNames.ToDictionary(
-        name => Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(name))), StringComparer.Ordinal);
-    private readonly ByteString accountEntityId = ByteString.CopyFrom(ObjectId.GenerateNewId().ToByteArray());
-    private LocalAccount? account;
-    private ByteString? avatarEntityId;
+    private readonly NetworkStream _stream;
+    private readonly Lock _sendLock = new();
+    private readonly Queue<GatewayFrame> _pendingFrames = new();
+    private readonly byte[] _wireBuffer = new byte[8192];
+    private readonly byte[] _inflateBuffer = new byte[8192];
+    private readonly byte[] _header = new byte[4];
+    private int _headerCount;
+    private byte[]? _body;
+    private int _bodyCount;
+    private RC4Engine? _encryptor;
+    private RC4Engine? _decryptor;
+    private Deflater? _deflater;
+    private Inflater? _inflater;
+    private int _closed;
+
+    public GatewaySession(long connectionId, NetworkStream stream, GatewayHostedService server, GatewayRouter router, ServerOptions options)
+    {
+        ConnectionId = connectionId;
+        _stream = stream;
+        Server = server;
+        Router = router;
+        Options = options;
+        AccountEntityId = ByteString.CopyFrom(ObjectId.GenerateNewId().ToByteArray());
+    }
+
+    public long ConnectionId { get; }
+
+    public GatewayHostedService Server { get; }
+
+    public GatewayRouter Router { get; }
+
+    public ServerOptions Options { get; }
+
+    public ByteString AccountEntityId { get; }
+
+    public ByteString? AvatarEntityId { get; private set; }
+
+    public Player? Player { get; private set; }
+
+    public long PlayerUid => Player?.Uid ?? 0;
+
     public string Stage { get; private set; } = "seed";
 
-    public async Task RunAsync(CancellationToken cancellationToken)
+    public bool IsClosed => Volatile.Read(ref _closed) != 0;
+
+    public void SetStage(string stage) => Stage = stage;
+
+    public void BindPlayer(Player player)
+    {
+        ArgumentNullException.ThrowIfNull(player);
+        if (IsClosed)
+        {
+            throw new InvalidOperationException("不能为已关闭的 Gateway 会话绑定玩家");
+        }
+
+        Player = player;
+        player.Session = this;
+        AvatarEntityId = ByteString.CopyFrom(ObjectId.Parse(player.Profile.AvatarId).ToByteArray());
+        Stage = "authenticated";
+    }
+
+    public void UnbindPlayer()
+    {
+        if (Player is { } player && ReferenceEquals(player.Session, this))
+        {
+            player.Session = null;
+        }
+        Player = null;
+    }
+
+    public void Close()
+    {
+        if (Interlocked.Exchange(ref _closed, 1) != 0)
+        {
+            return;
+        }
+
+        UnbindPlayer();
+        try
+        {
+            _stream.Close();
+        }
+        catch
+        {
+        }
+    }
+
+    public void Kick()
+    {
+        Close();
+    }
+
+    public bool SendPack(BasePacket packet)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+        if (IsClosed)
+        {
+            return false;
+        }
+
+        IMessage message = packet.CreateMessage();
+        byte[] payload = message.ToByteArray();
+        if (payload.Length + 2 > Options.GatewayMaxFrameBytes)
+        {
+            throw new InvalidDataException("发送帧过大");
+        }
+
+        byte[] frame = new byte[payload.Length + 6];
+        BinaryPrimitives.WriteUInt32LittleEndian(frame, (uint)(payload.Length + 2));
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(4), packet.Method);
+        payload.CopyTo(frame, 6);
+
+        lock (_sendLock)
+        {
+            if (IsClosed)
+            {
+                return false;
+            }
+
+            try
+            {
+                if (_deflater is not null)
+                {
+                    using MemoryStream compressed = new();
+                    _deflater.SetInput(frame);
+                    _deflater.Flush();
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = _deflater.Deflate(buffer)) > 0)
+                    {
+                        compressed.Write(buffer, 0, count);
+                    }
+                    frame = compressed.ToArray();
+                }
+
+                _encryptor?.ProcessBytes(frame, 0, frame.Length, frame, 0);
+                _stream.Write(frame);
+                _stream.Flush();
+                return true;
+            }
+            catch
+            {
+                Close();
+                return false;
+            }
+        }
+    }
+
+    public async Task RunAsync()
     {
         try
         {
-            await HandshakeAsync(cancellationToken);
-            while (true)
+            await HandshakeAsync();
+            while (!IsClosed)
             {
-                GatewayFrame frame = await ReceiveAsync(cancellationToken);
+                GatewayFrame frame = await ReadFrameAsync();
                 if (frame.Method == 4)
                 {
                     Md5OrIndex registration = Md5OrIndex.Parser.ParseFrom(frame.Payload);
                     if (registration.Md5.Length != 16 || registration.Index <= 0)
+                    {
                         throw new InvalidDataException("实体方法索引注册无效");
-                    continue; // 可以继续发送 MD5，客户端索引是可选优化。
+                    }
+                    continue;
                 }
-                if (frame.Method != 3) throw new InvalidDataException("当前状态不允许该 RPC");
-                await EntityMessageAsync(EntityMessage.Parser.ParseFrom(frame.Payload), cancellationToken);
+
+                if (frame.Method != 3)
+                {
+                    throw new InvalidDataException("当前状态不允许该 RPC");
+                }
+
+                EntityMessage message = EntityMessage.Parser.ParseFrom(frame.Payload);
+                Router.Route(this, message);
             }
         }
         finally
         {
-            if (account is not null) accounts.Release(account);
+            if (Player is not null)
+            {
+                Server.RemoveSession(Player.Uid);
+            }
+            Close();
         }
     }
 
-    private async Task HandshakeAsync(CancellationToken cancellationToken)
+    private async Task HandshakeAsync()
     {
-        GatewayFrame frame = await ReceiveAsync(cancellationToken);
-        if (frame.Method != 0 || frame.Payload.Length != 0) throw new InvalidDataException("首包必须是 seed_request");
+        // 1. 首包 seed_request
+        GatewayFrame frame = await ReadExactFrameAsync();
+        if (frame.Method != 0 || frame.Payload.Length != 0)
+        {
+            throw new InvalidDataException("首包必须是 seed_request");
+        }
+
         long seed = BinaryPrimitives.ReadInt64LittleEndian(RandomNumberGenerator.GetBytes(8)) & long.MaxValue;
-        await connection.SendAsync(0, new SessionSeed { Seed = seed }, cancellationToken);
+        SendPack(new SessionSeedReplyPacket(seed));
         Stage = "session_key";
-        frame = await ReceiveAsync(cancellationToken);
-        if (frame.Method != 1) throw new InvalidDataException("未收到 session_key");
+
+        // 2. session_key
+        frame = await ReadExactFrameAsync();
+        if (frame.Method != 1)
+        {
+            throw new InvalidDataException("未收到 session_key");
+        }
+
         EncryptString encrypted = EncryptString.Parser.ParseFrom(frame.Payload);
-        byte[] decrypted = keys.Decrypt(encrypted.Encryptstr.ToByteArray());
+        byte[] decrypted = AeadTool.DecryptRsaOaep(encrypted.Encryptstr.ToByteArray());
         try
         {
             SessionKey sessionKey = SessionKey.Parser.ParseFrom(decrypted);
             if (!sessionKey.HasSeed || sessionKey.Seed != seed || sessionKey.SessionKey_.Length != 20 ||
                 sessionKey.RandomPaddingHeader.Length is < 2 or > 9 || sessionKey.RandomPaddingTail.Length is < 2 or > 9)
+            {
                 throw new InvalidDataException("会话密钥或 seed 校验失败");
+            }
+
             byte[] key = sessionKey.SessionKey_.ToByteArray();
-            try { connection.EnableEncryption(key); }
-            finally { CryptographicOperations.ZeroMemory(key); }
+            try
+            {
+                _encryptor = AeadTool.CreateRc4Engine(key, true);
+                _decryptor = AeadTool.CreateRc4Engine(key, false);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(key);
+            }
         }
-        finally { CryptographicOperations.ZeroMemory(decrypted); }
-        await connection.SendAsync(1, new ProtoVoid(), cancellationToken);
+        finally
+        {
+            CryptographicOperations.ZeroMemory(decrypted);
+        }
+
+        SendPack(new SessionKeyOkPacket());
         Stage = "connect_server";
-        frame = await ReceiveAsync(cancellationToken);
-        if (frame.Method != 2) throw new InvalidDataException("未收到 connect_server");
+
+        // 3. connect_server
+        frame = await ReadExactFrameAsync();
+        if (frame.Method != 2)
+        {
+            throw new InvalidDataException("未收到 connect_server");
+        }
+
         ConnectServerRequest request = ConnectServerRequest.Parser.ParseFrom(frame.Payload);
-        if (!request.HasType || request.Deviceid.Length > 256) throw new InvalidDataException("连接请求无效");
-        // 客户端在发送 connect_server 之后启用 zlib；回复及后续实体消息均走压缩流。
-        connection.EnableCompression();
+        if (!request.HasType || request.Deviceid.Length > 256)
+        {
+            throw new InvalidDataException("连接请求无效");
+        }
+
+        _deflater = new Deflater(Deflater.DEFAULT_COMPRESSION, noZlibHeaderOrFooter: false);
+        _inflater = new Inflater(noHeader: false);
+
         if (request.Type != ConnectServerRequest.Types.RequestType.NewConnection)
         {
-            await connection.SendAsync(2, new ConnectServerReply { Type = ConnectServerReply.Types.ReplyType.ReconnectFailed }, cancellationToken);
+            SendPack(new ConnectServerReplyPacket(ConnectServerReply.Types.ReplyType.ReconnectFailed));
             throw new InvalidDataException("尚不支持恢复旧会话，需重新登录");
         }
-        await connection.SendAsync(2, new ConnectServerReply { Type = ConnectServerReply.Types.ReplyType.Connected }, cancellationToken);
-        await connection.SendAsync(3, new EntityInfo
-        {
-            Id = accountEntityId, Type = EncodeName("ClientAccount"), Info = ByteString.CopyFrom(new BsonDocument().ToBson()),
-        }, cancellationToken);
+
+        SendPack(new ConnectServerReplyPacket(ConnectServerReply.Types.ReplyType.Connected));
+        SendPack(new ClientAccountPacket(AccountEntityId));
         Stage = "account_login";
-        Log.Information("Gateway {ConnectionId} RSA/ARC4/zlib 握手完成，已下发 ClientAccount", connectionId);
+        Log.Information("Gateway {ConnectionId} RSA/ARC4/zlib 握手完成，已下发 ClientAccount", ConnectionId);
     }
 
-    private async Task EntityMessageAsync(EntityMessage message, CancellationToken cancellationToken)
+    private async Task<GatewayFrame> ReadExactFrameAsync()
     {
-        if (!message.HasId || message.Method is null || message.Method.Index > 0 || message.Method.Md5.Length != 16 ||
-            (message.Id != accountEntityId && message.Id != avatarEntityId))
-            throw new InvalidDataException("实体归属或方法标识无效");
-        string digest = Convert.ToHexString(message.Method.Md5.Span);
-        string? method = Methods.GetValueOrDefault(digest);
-        if (method is null)
+        byte[] prefix = new byte[4];
+        await _stream.ReadExactlyAsync(prefix);
+        _decryptor?.ProcessBytes(prefix, 0, prefix.Length, prefix, 0);
+
+        uint length = BinaryPrimitives.ReadUInt32LittleEndian(prefix);
+        if (length < 2 || length > Options.GatewayMaxFrameBytes)
         {
-            Log.Debug("Gateway {ConnectionId} 未实现实体 RPC md5={MethodHash} bytes={Length}", connectionId, digest, message.Parameters.Length);
-            return;
+            throw new InvalidDataException("RPC 帧长度越界");
         }
-        if (method is "login" or "loginWithUrs")
+
+        byte[] packet = new byte[length];
+        await _stream.ReadExactlyAsync(packet);
+        _decryptor?.ProcessBytes(packet, 0, packet.Length, packet, 0);
+
+        return new GatewayFrame(BinaryPrimitives.ReadUInt16LittleEndian(packet), packet[2..]);
+    }
+
+    private async Task<GatewayFrame> ReadFrameAsync()
+    {
+        if (_inflater is null)
         {
-            if (message.Id != accountEntityId || account is not null)
-                throw new InvalidDataException("登录阶段或实体错误");
-            if (method == "loginWithUrs")
+            return await ReadExactFrameAsync();
+        }
+
+        while (_pendingFrames.Count == 0)
+        {
+            int read = await _stream.ReadAsync(_wireBuffer);
+            if (read == 0)
             {
-                await LoginFailedAsync("本地 Gateway 只支持调试账号登录", cancellationToken);
-                return;
+                throw new EndOfStreamException();
             }
-            BsonDocument args = ReadArguments(message);
-            if (!args.TryGetValue("name", out BsonValue? name) || !name.IsString ||
-                !args.TryGetValue("sv", out BsonValue? server) || !server.IsInt32 || server.AsInt32 != options.ServerId ||
-                !args.TryGetValue("psw", out BsonValue? password) || !password.IsString || password.AsString.Length != 0)
+
+            _decryptor?.ProcessBytes(_wireBuffer, 0, read, _wireBuffer, 0);
+            _inflater.SetInput(_wireBuffer, 0, read);
+            int expanded = 0;
+            while (true)
             {
-                await LoginFailedAsync("调试账号或区服参数不正确", cancellationToken);
-                return;
-            }
-            account = accounts.Acquire(name.AsString, server.AsInt32);
-            if (account is null)
-            {
-                await LoginFailedAsync("该本地账号已在线", cancellationToken);
-                return;
-            }
-            avatarEntityId = ByteString.CopyFrom(ObjectId.Parse(account.AvatarId).ToByteArray());
-            await connection.SendAsync(3, new EntityInfo
-            {
-                Id = avatarEntityId, Type = EncodeName("ClientAvatar"),
-                Info = ByteString.CopyFrom(AvatarSnapshot.Create(account, options)),
-            }, cancellationToken);
-            await SendEntityAsync(avatarEntityId, "become_player", new BsonDocument(), cancellationToken);
-            Stage = "avatar_sent";
-            Log.Information("Gateway {ConnectionId} 本地账号 UID={UserId} 登录通过，已下发角色和 become_player；等待客户端心跳",
-                connectionId, account.UserId);
-            return;
-        }
-        if (account is null || message.Id != avatarEntityId) throw new InvalidDataException("角色尚未登录");
-        if (method == "heartbeatServer")
-        {
-            _ = ReadArguments(message);
-            await SendEntityAsync(avatarEntityId, "on_heartbeat", new BsonDocument(), cancellationToken);
-            if (Stage != "online") Log.Information("Gateway {ConnectionId} 收到角色心跳，基础登录已完成 UID={UserId}", connectionId, account.UserId);
-            Stage = "online";
-        }
-        else if (method == "syncServerTime")
-        {
-            await SendEntityAsync(avatarEntityId, "onSyncServerTime",
-                new BsonDocument { ["t"] = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds() }, cancellationToken);
-        }
-        else if (method == "syncAllIntelligenceRequest")
-        {
-            await SendEntityAsync(avatarEntityId, "syncAllIntelligence",
-                new BsonDocument
+                int count = _inflater.Inflate(_inflateBuffer);
+                expanded += count;
+                if (expanded > Options.GatewayMaxFrameBytes * 4)
                 {
-                    ["is"] = new BsonDocument
-                    {
-                        ["is"] = new BsonArray(),
-                        ["rd"] = false,
-                    },
-                }, cancellationToken);
-        }
-        else if (method == "pullEvents")
-        {
-            BsonDocument args = ReadArguments(message);
-            int cbid = args.GetValue("_cbid_", 0).AsInt32;
-            BsonDocument reply = new()
-            {
-                ["a"] = new BsonArray(),
-                ["p"] = new BsonArray(),
-            };
-            if (cbid != 0) reply["_cbid_"] = cbid;
-            await SendEntityAsync(avatarEntityId, "pullEventsReply", reply, cancellationToken);
-        }
-        else if (method == "reliableRpcCall")
-        {
-            BsonDocument args = ReadArguments(message);
-            if (args.TryGetValue("w", out BsonValue? wVal) && wVal.IsBsonDocument)
-            {
-                BsonDocument wrapper = wVal.AsBsonDocument;
-                string? subMethod = wrapper.GetValue("m", null)?.AsString;
-                int rpcSeq = wrapper.GetValue("r", 0).AsInt32;
-                int cbid = args.GetValue("_cbid_", 0).AsInt32;
-                if (cbid == 0 && wrapper.TryGetValue("p", out BsonValue? pVal) && pVal.IsBsonDocument)
-                {
-                    cbid = pVal.AsBsonDocument.GetValue("_cbid_", 0).AsInt32;
+                    throw new InvalidDataException("压缩流展开量超过限制");
                 }
 
-                await SendEntityAsync(avatarEntityId, "reliableRpcAck", new BsonDocument { ["s"] = rpcSeq }, cancellationToken);
-
-                if (subMethod == "pullEvents")
+                Feed(_inflateBuffer.AsSpan(0, count));
+                if (_inflater.IsFinished || _inflater.IsNeedingDictionary)
                 {
-                    BsonDocument reply = new()
-                    {
-                        ["a"] = new BsonArray(),
-                        ["p"] = new BsonArray(),
-                    };
-                    if (cbid != 0) reply["_cbid_"] = cbid;
-                    await SendEntityAsync(avatarEntityId, "pullEventsReply", reply, cancellationToken);
+                    throw new InvalidDataException("不支持结束或带外字典的压缩流");
                 }
-                else
+
+                if (count == 0)
                 {
-                    Log.Debug("Gateway {ConnectionId} reliableRpcCall 未专门处理子方法 {SubMethod}", connectionId, subMethod);
+                    if (_inflater.IsNeedingInput) break;
+                    throw new InvalidDataException("压缩流无法继续解码");
                 }
             }
         }
-        else
+
+        return _pendingFrames.Dequeue();
+    }
+
+    private void Feed(ReadOnlySpan<byte> bytes)
+    {
+        while (!bytes.IsEmpty)
         {
-            // 设备/进程/位置等上报不落盘，不把未知玩法请求当作成功。
-            Log.Debug("Gateway {ConnectionId} 暂未处理 {Method}", connectionId, method);
+            if (_body is null)
+            {
+                int count = Math.Min(4 - _headerCount, bytes.Length);
+                bytes[..count].CopyTo(_header.AsSpan(_headerCount));
+                _headerCount += count;
+                bytes = bytes[count..];
+                if (_headerCount < 4) continue;
+
+                uint length = BinaryPrimitives.ReadUInt32LittleEndian(_header);
+                if (length < 2 || length > Options.GatewayMaxFrameBytes)
+                {
+                    throw new InvalidDataException("RPC 帧长度越界");
+                }
+
+                _body = new byte[length];
+                _headerCount = 0;
+                _bodyCount = 0;
+            }
+
+            int consumed = Math.Min(_body.Length - _bodyCount, bytes.Length);
+            bytes[..consumed].CopyTo(_body.AsSpan(_bodyCount));
+            _bodyCount += consumed;
+            bytes = bytes[consumed..];
+            if (_bodyCount == _body.Length)
+            {
+                if (_pendingFrames.Count >= 256)
+                {
+                    throw new InvalidDataException("待处理 RPC 数量超过限制");
+                }
+
+                _pendingFrames.Enqueue(new GatewayFrame(
+                    BinaryPrimitives.ReadUInt16LittleEndian(_body), _body[2..]));
+                _body = null;
+            }
         }
-    }
-
-    private static BsonDocument ReadArguments(EntityMessage message)
-    {
-        if (message.Parameters.Length is < 5 or > 16384) throw new InvalidDataException("BSON 参数长度无效");
-        byte[] bytes = message.Parameters.ToByteArray();
-        if (BinaryPrimitives.ReadInt32LittleEndian(bytes) != bytes.Length || bytes[^1] != 0)
-            throw new InvalidDataException("BSON 文档长度不匹配");
-        return BsonSerializer.Deserialize<BsonDocument>(bytes);
-    }
-
-    private Task LoginFailedAsync(string reason, CancellationToken token) => SendEntityAsync(accountEntityId, "onLoginFail",
-        new BsonDocument { ["e"] = 1, ["m"] = reason }, token);
-
-    private Task SendEntityAsync(ByteString id, string method, BsonDocument arguments, CancellationToken token) =>
-        connection.SendAsync(5, new EntityMessage { Id = id, Method = EncodeName(method), Parameters = ByteString.CopyFrom(arguments.ToBson()) }, token);
-
-    private static Md5OrIndex EncodeName(string name) => new() { Md5 = ByteString.CopyFrom(MD5.HashData(Encoding.UTF8.GetBytes(name))) };
-
-    private async Task<GatewayFrame> ReceiveAsync(CancellationToken token)
-    {
-        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-        timeout.CancelAfter(TimeSpan.FromSeconds(account is null ? options.GatewayHandshakeSeconds : options.GatewayIdleSeconds));
-        return await connection.ReadAsync(timeout.Token);
     }
 }

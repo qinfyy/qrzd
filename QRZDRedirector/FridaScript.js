@@ -1,6 +1,5 @@
 'use strict';
 
-// Native Realm 只管理 MuMu Native Bridge；NeoX/Python 仅在 ARM64 Realm 操作。
 let CONFIG = null;
 const MODULE_WAIT_TIMEOUT_MS = 30000;
 const EMULATED_NAMESPACE_DIRECTORY = '/data/local/tmp/re.frida.server';
@@ -80,8 +79,6 @@ const NEOX_API = {
 const NEOX_THREAD_STATE_RVA = 0x48637F8;
 const NEOX_STATUS_KEY = '_neox_local_status';
 
-// 只接管 HAR 中的业务请求及实测出现的 announcement_other。
-// 在 request 阶段选择本地 HTTPConnection，避免仅换地址却仍发送 TLS。
 const NEOX_HTTP_CODE = [
     'def _neox_install_http(local_host, local_port):',
     '    import sys, urlparse',
@@ -140,8 +137,6 @@ const NEOX_HTTP_CODE = [
     '    return True',
 ].join('\n');
 
-// 不主动导入尚未完成初始化的游戏模块，不改全局 DEBUG，不伪造 SDK 令牌。
-// SDK 开关、UI 可见性和 Gateway 分开处理；返回等待/错误时绝不报告成功。
 const NEOX_BYPASS_CODE = [
     'import sys',
     'def _neox_apply_local_login(host, port, allow_ui, http_host, http_port, gateway_key=""):',
@@ -375,8 +370,7 @@ function installNeoXPythonBypass(module) {
         const definition = NEOX_API[name];
         if (definition.args !== undefined) {
             // 禁止注入代码递归命中自身，且不在持有 GIL 时让出 JS 锁。
-            api[name] = new NativeFunction(addresses[name], definition.result, definition.args,
-                { scheduling: 'exclusive', traps: 'none' });
+            api[name] = new NativeFunction(addresses[name], definition.result, definition.args, { scheduling: 'exclusive', traps: 'none' });
         }
     }
     neoxState = {
@@ -403,7 +397,7 @@ function installNeoXPythonBypass(module) {
         },
     });
     neoxArmFrameHook();
-    report('[就绪] ARM64 Python 入口校验通过；无限等待游戏模块和游戏线程就绪，尚未宣称 SDK 已跳过');
+    report('[就绪] ARM64 Python 入口校验通过；游戏线程就绪');
 }
 
 function waitForNeoXModule() {
@@ -436,9 +430,8 @@ function waitForNeoXModule() {
 
 function start(config) {
     CONFIG = config;
-    if (CONFIG.clientArch !== 'arm64-v8a' ||
-        !['platform', 'neox', 'all'].includes(CONFIG.runtimeRole)) {
-        throw new Error('仅支持当前 NeoX ARM64 样本和 platform/neox/all 角色');
+    if (CONFIG.clientArch !== 'arm64-v8a' || !['platform', 'neox', 'all'].includes(CONFIG.runtimeRole)) {
+        throw new Error('仅支持当前 NeoX ARM64 版本');
     }
     if (CONFIG.runtimeRole === 'platform') {
         if (!CONFIG.emulator || Process.arch !== 'x64') {

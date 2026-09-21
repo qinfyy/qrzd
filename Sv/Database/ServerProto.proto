@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package Sv.Database;
+
+// 玩家基础信息
+message PlayerProfileComp {
+    int64 create_time = 1;
+    string nick_name = 2;
+    int32 level = 3;
+    int32 role_id = 4;
+    string avatar_id = 5;
+    int32 server_id = 6;
+}
+
+// 周目与天数
+message WeekNumComp {
+    int32 week = 1;
+    int32 day = 2;
+}
+
+// 玩家状态（主城、战斗等）
+message StatusComp {
+    string current_status = 1;
+}
+
+// 城市与建设数值
+message CityComp {
+    int32 action_val = 1;
+    int32 develop_val = 2;
+    int32 develop_val_count = 3;
+    int32 build_fund = 4;
+    int32 fatigue_val = 5;
+    int32 event_val = 6;
+    int32 research_val = 7;
+}
+
+// 背包与道具
+message InventoryComp {
+    int32 max_cost = 1;
+}
+
+// 神器使管理器
+message HeroMgrComp {
+}
+
+// 社交数据
+message SocialComp {
+}
+
+// 情报数据
+message IntelligenceComp {
+    bool readed = 1;
+}
+
+// 玩家持久化存档聚合根
+message PlayerSaveData {
+    PlayerProfileComp profile_comp = 1;
+    WeekNumComp week_num_comp = 2;
+    StatusComp status_comp = 3;
+    CityComp city_comp = 4;
+    InventoryComp inventory_comp = 5;
+    HeroMgrComp hero_mgr_comp = 6;
+    SocialComp social_comp = 7;
+    IntelligenceComp intelligence_comp = 8;
+}

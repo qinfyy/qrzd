@@ -1,0 +1,94 @@
+syntax = "proto2";
+package mobile.server;
+option csharp_namespace = "Sv.Gateway.Protocol";
+
+// 来自当前客户端 common.proto / client_gate.proto 描述符，字段号和 service 方法顺序不变。
+message Void {}
+
+message EncryptString {
+    required bytes encryptstr = 1;
+}
+
+message SessionSeed {
+    required int64 seed = 1;
+}
+
+message SessionKey {
+    required bytes random_padding_header = 1;
+    required bytes session_key = 2;
+    required int64 seed = 3;
+    required bytes random_padding_tail = 4;
+}
+
+message ConnectServerRequest {
+    enum RequestType { NEW_CONNECTION = 0; RE_CONNECTION = 1; BIND_AVATAR = 2; }
+    optional bytes routes = 1;
+    required RequestType type = 2;
+    optional bytes deviceid = 3;
+    optional bytes entityid = 4;
+    optional bytes authmsg = 5;
+    optional uint32 received_seq = 6;
+}
+
+message ConnectServerReply {
+    enum ReplyType { BUSY = 0; CONNECTED = 1; RECONNECT_SUCCEEDED = 2; RECONNECT_FAILED = 3; FORBIDDEN = 4; MAX_CONNECTION = 5; }
+    optional bytes routes = 1;
+    required ReplyType type = 2 [default = BUSY];
+    optional bytes entityid = 3;
+    optional uint32 received_seq = 4;
+}
+
+message Md5OrIndex {
+    optional bytes md5 = 1;
+    optional sint32 index = 2 [default = -1];
+    optional uint32 seq = 3;
+}
+
+message EntityMessage {
+    optional bytes routes = 1;
+    required bytes id = 2;
+    required Md5OrIndex method = 3;
+    optional bytes parameters = 4;
+    optional uint32 seq = 5;
+}
+
+message EntityInfo {
+    optional bytes routes = 1;
+    optional Md5OrIndex type = 2;
+    optional bytes id = 3;
+    optional bytes info = 4;
+    optional uint32 seq = 5;
+}
+
+message OutBandInfo {
+    optional bytes routes = 1;
+    required bytes message = 2;
+    optional uint32 seq = 3;
+}
+
+message BroadcastMessage {
+    required int32 filter_index = 1;
+    required bytes parameters = 2;
+    required Md5OrIndex method = 3;
+    optional uint32 seq = 4;
+}
+
+service IGateService {
+    rpc seed_request(Void) returns (Void);
+    rpc session_key(EncryptString) returns (Void);
+    rpc connect_server(ConnectServerRequest) returns (Void);
+    rpc entity_message(EntityMessage) returns (Void);
+    rpc reg_md5_index(Md5OrIndex) returns (Void);
+}
+
+service IGateClient {
+    rpc seed_reply(SessionSeed) returns (Void);
+    rpc session_key_ok(Void) returns (Void);
+    rpc connect_reply(ConnectServerReply) returns (Void);
+    rpc create_entity(EntityInfo) returns (Void);
+    rpc destroy_entity(EntityInfo) returns (Void);
+    rpc entity_message(EntityMessage) returns (Void);
+    rpc chat_to_client(OutBandInfo) returns (Void);
+    rpc reg_md5_index(Md5OrIndex) returns (Void);
+    rpc broadcast_message(BroadcastMessage) returns (Void);
+}

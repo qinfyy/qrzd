@@ -8,12 +8,27 @@ public sealed class ServerOptions
     public const string SectionName = "Server";
     public int HttpPort { get; init; } = 21000;
     public string AdvertiseHost { get; init; } = "127.0.0.1";
+
     public int GatewayPort { get; init; } = 4120;
+    public int Port { get => GatewayPort; init => GatewayPort = value; }
+
     public string GatewayPrivateKeyPath { get; init; } = "ServerData/gateway_private.pem";
+    public string PrivateKeyPath { get => GatewayPrivateKeyPath; init => GatewayPrivateKeyPath = value; }
+
     public int GatewayMaxConnections { get; init; } = 32;
+    public int MaxConnections { get => GatewayMaxConnections; init => GatewayMaxConnections = value; }
+
     public int GatewayMaxFrameBytes { get; init; } = 65536;
+    public int MaxFrameBytes { get => GatewayMaxFrameBytes; init => GatewayMaxFrameBytes = value; }
+
+    public string TimeZone { get; init; } = "China Standard Time";
+
     public int GatewayHandshakeSeconds { get; init; } = 30;
+    public int HandshakeSeconds { get => GatewayHandshakeSeconds; init => GatewayHandshakeSeconds = value; }
+
     public int GatewayIdleSeconds { get; init; } = 120;
+    public int IdleSeconds { get => GatewayIdleSeconds; init => GatewayIdleSeconds = value; }
+
     public int HostId { get; init; } = 10003;
     public int ServerId { get; init; } = 5004;
     public string ServerName { get; init; } = "本地测试服";
@@ -47,9 +62,13 @@ public sealed class ServerOptions
         }
         if (GatewayMaxConnections is < 1 or > 256 || GatewayMaxFrameBytes is < 1024 or > 1048576 ||
             GatewayHandshakeSeconds is < 1 or > 300 || GatewayIdleSeconds is < 10 or > 3600)
+        {
             throw new InvalidOperationException("Gateway 容量、帧大小或超时配置无效");
+        }
         if (string.IsNullOrWhiteSpace(GatewayPrivateKeyPath))
+        {
             throw new InvalidOperationException("GatewayPrivateKeyPath 不能为空");
+        }
         if (HostId <= 0 || ServerId <= 0 || string.IsNullOrWhiteSpace(ServerName) ||
             ServerName.Any(char.IsWhiteSpace) || ServerName.Contains('#'))
         {
