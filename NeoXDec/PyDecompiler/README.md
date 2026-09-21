@@ -1,6 +1,6 @@
 # PyDecompiler - Python 字节码反编译模块
 
-**职责**：负责将 `PyDec` 修复出的标准 Python 2.7 字节码（`.pyc`）反编译为可读的 Python 源代码（`.py`）。
+将 `PyDec` 修复出的标准 Python 2.7 字节码（`.pyc`）反编译为可读的 Python 源代码（`.py`）。
 
 在 Python 3 环境下原生运行，基于 `uncompyle6 3.9.3` 与 `xdis 6.1.7` 构建，并内置了针对 NeoX 引擎特有语法的控制流与 AST 适配层。
 

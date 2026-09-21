@@ -252,7 +252,7 @@ def try_lift_data(pyc_path: Path, output_path: Path) -> int:
         magic = f.read(4)
         if magic != b'\x03\xf3\x0d\x0a':
             raise Unsupported('非标准 Python 2.7 pyc 魔数')
-        f.read(4)  # skip timestamp
+        f.read(4)  # 跳过时间戳
         raw_bytes = f.read()
 
     reader = Py27Reader(raw_bytes)

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Pure-python port of CPython 2.7 Modules/rotormodule.c (rotor.newrotor)."""
+"""CPython 2.7 Modules/rotormodule.c (rotor.newrotor) 的纯 Python 实现。"""
 
 import math
 
@@ -26,7 +26,7 @@ def _rot16(v, n):
 
 
 class Rotor(object):
-    """NeoX compatible software rotor stream cipher."""
+    """兼容 NeoX 的软件 Rotor 流密码加密实现。"""
 
     def __init__(self, key, num_rotors=6):
         if isinstance(key, str):

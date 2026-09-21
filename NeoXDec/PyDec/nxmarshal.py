@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
-"""Python 2.7 marshal reader/writer for NeoX code objects.
+"""
+NeoX 代码对象的 Python 2.7 marshal 序列化/反序列化器。
 
-Preserves raw bytes for TYPE_STRING/TYPE_INTERNED and safely handles
-surrogate characters in TYPE_UNICODE.
+对 TYPE_STRING/TYPE_INTERNED 保持原始字节序列，并安全处理
+TYPE_UNICODE 中的代理字符（surrogate characters）。
 """
 
 import struct
 
-# ---- py2.7 marshal type tags ----
+# ---- Python 2.7 marshal 类型标签 ----
 T_NULL = ord('0')
 T_NONE = ord('N')
 T_FALSE = ord('F')
@@ -37,7 +37,7 @@ PY27_MAGIC = b'\x03\xf3\x0d\x0a'
 
 
 class Code(object):
-    """Container for Python 2.7 code objects parsed from NeoX marshal data."""
+    """从 NeoX marshal 数据中解析出的 Python 2.7 code 对象容器。"""
 
     __slots__ = (
         'argcount',
@@ -65,7 +65,7 @@ class Code(object):
 
 
 class Reader(object):
-    """NeoX marshal deserializer."""
+    """NeoX marshal 反序列化器。"""
 
     def __init__(self, buf):
         self.b = buf

@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
-"""Vectorised rotor decryption (numpy).
+"""
+向量化 Rotor 流解密（基于 NumPy 预计算加速）。
 
-Precomputes rotor positions to accelerate batch decryption.
+预先计算所有 Rotor 轮盘步进位置，大幅提升批量解密吞吐率。
 """
 
 import numpy as np
@@ -13,7 +13,7 @@ except ImportError:
 
 
 class FastRotor(object):
-    """Numpy-accelerated Rotor cipher for high-throughput stream decryption."""
+    """NumPy 向量化加速的 Rotor 密码机，用于高速流式解密。"""
 
     def __init__(self, key, num_rotors=6, maxlen=1):
         r = Rotor(key, num_rotors)

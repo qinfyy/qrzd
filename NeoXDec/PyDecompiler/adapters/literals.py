@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-"""NeoX-specific literal parsing patches for xdis 6.1.7 and uncompyle6."""
+"""针对 xdis 6.1.7 与 uncompyle6 的 NeoX 特化字面量解析补丁。"""
 
 import math
 
@@ -7,7 +6,7 @@ _installed = False
 
 
 def install():
-    """Install literal parsing patches."""
+    """安装字面量解析补丁。"""
     global _installed
     if _installed:
         return False

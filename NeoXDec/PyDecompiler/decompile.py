@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
-"""NeoXDec.PyDecompiler 命令行反编译工具。
+"""
+NeoXDec.PyDecompiler 命令行反编译工具。
 
 功能：
 - 接收 PyDec 修复后的标准 Python 2.7 .pyc 文件；

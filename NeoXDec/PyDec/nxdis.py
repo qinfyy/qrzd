@@ -1,15 +1,15 @@
-# -*- coding: utf-8 -*-
-"""NeoX (Python 2.7) bytecode decoder, opcode deobfuscator and disassembler.
+"""
+NeoX (Python 2.7) 字节码解码器、操作码去混淆与反汇编工具。
 
-Remaps NeoX encrypted opcode values back to standard CPython 2.7 opcodes,
-expands fused opcodes (173 -> LOAD_FAST 0 + LOAD_CONST), fixes EXTENDED_ARG (160 -> 145),
-and recalculates/relocates jump targets and line number tables (lnotab) until convergence.
+将 NeoX 加密操作码映射回标准 CPython 2.7 操作码，
+展开复合融合指令（173 -> LOAD_FAST 0 + LOAD_CONST），修正 EXTENDED_ARG（160 -> 145），
+并迭代重新计算/重定位跳转目标偏移与行号表（lnotab）直至收敛。
 """
 
 import struct
 import sys
 
-# Real py2.7 opcode -> NeoX encrypted opcode
+# CPython 2.7 操作码 -> NeoX 加密操作码
 ENC = {
     1: 38,
     2: 46,
@@ -124,13 +124,13 @@ ENC = {
     143: 94,
     146: 109,
     147: 123,
-    # Extra entries recovered from script.npk:
-    27: 13,   # BINARY_TRUE_DIVIDE (from __future__ import division)
+    # 从 script.npk 中恢复的额外操作码条目：
+    27: 13,   # BINARY_TRUE_DIVIDE (源自 __future__ import division)
     145: 160, # EXTENDED_ARG
 }
 DEC = {v: k for k, v in ENC.items()}
 
-# Encrypted 173 (0xAD) is a NeoX fused LOAD_FAST 0 + LOAD_CONST
+# 加密指令 173 (0xAD) 是 NeoX 的复合融合指令：LOAD_FAST 0 + LOAD_CONST
 FUSED_LOAD_FAST_CONST = 173
 ENC_EXTENDED_ARG = 160
 REAL_EXTENDED_ARG = 145
@@ -258,7 +258,7 @@ OPNAME = {
 }
 CMP = ['<', '<=', '==', '!=', '>', '>=']
 
-# py2.7 jump opcodes
+# Python 2.7 跳转指令操作码
 JUMP_ABS = {111, 112, 113, 114, 115, 119}
 JUMP_REL = {93, 110, 120, 121, 122, 143}
 
@@ -287,7 +287,7 @@ def _enc_instr(real, arg):
 
 
 def fix_opcodes(code, strict=False, return_mapping=False):
-    """Convert NeoX-shuffled opcodes back to standard CPython 2.7 opcodes."""
+    """将 NeoX 打乱的操作码转换还原为标准 CPython 2.7 操作码。"""
     items = []
     i = 0
     n = len(code)
@@ -440,7 +440,7 @@ def fix_opcodes(code, strict=False, return_mapping=False):
 
 
 def relocate_lnotab(lnotab, old2new):
-    """Relocate Python 2.7 unsigned line number deltas to new instruction offsets."""
+    """将 Python 2.7 无符号行号增量重定位到新的指令偏移量。"""
     if len(lnotab) % 2:
         raise ValueError('odd lnotab length')
     out = bytearray()

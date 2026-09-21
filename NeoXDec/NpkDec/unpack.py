@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
-"""NeoXDec.NpkDec 命令行解包工具。
+"""
+NeoXDec.NpkDec 命令行解包工具。
 
 功能：
 - 仅负责解包 NPK 容器，不解析内部代码对象文件名，不修复字节码指令；

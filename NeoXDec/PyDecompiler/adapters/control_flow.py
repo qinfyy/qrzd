@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-"""NeoX-specific control flow patches for uncompyle6 3.9.3."""
+"""针对 uncompyle6 3.9.3 的 NeoX 特化控制流 AST 补丁。"""
 
 from functools import wraps
 
@@ -107,7 +106,7 @@ def _separate_nested_loop_condition(scanner, offset, op):
 
 
 def install():
-    """Install control flow monkeypatches into uncompyle6."""
+    """向 uncompyle6 安装控制流猴子补丁。"""
     global _installed
     if _installed:
         return False

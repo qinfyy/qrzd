@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-"""Safe empty-stack statement AST chunking for massive Python 2.7 modules (e.g. CEGUI)."""
+"""针对超大型 Python 2.7 顶层模块（如 CEGUI）的安全空栈语句 AST 分块反编译补丁。"""
 
 import argparse
 from functools import wraps

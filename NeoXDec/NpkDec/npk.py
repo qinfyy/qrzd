@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
-"""NeoX NPK container reader and parser.
+"""
+NeoX NPK 容器解析与读取器。
 
-Supports standard unencrypted index NPKs (e.g. script.npk) and AES-128-ECB
-encrypted index resource NPKs (e.g. assets/res/*.npk).
+支持标准未加密索引的脚本包（如 script.npk）以及
+AES-128-ECB 加密索引的资源包（如 assets/res/*.npk）。
 """
 
 import hashlib
@@ -20,7 +20,7 @@ DEFAULT_AES_INDEX_KEY = b'g58i^C04SW!@e}ad'
 
 
 def murmur3(data, seed=0x9747B28C):
-    """32-bit MurmurHash3 implementation matching NeoX asset name hashing."""
+    """32 位 MurmurHash3 实现，与 NeoX 资产名称散列算法完全一致。"""
     if isinstance(data, str):
         data = data.encode('utf-8')
     c1 = 0xcc9e2d51
@@ -59,7 +59,7 @@ def murmur3(data, seed=0x9747B28C):
 
 
 class Npk(object):
-    """Parser for NeoX NPK archive files."""
+    """NeoX NPK 归档文件解析器。"""
 
     def __init__(self, path_or_data, index_key=DEFAULT_AES_INDEX_KEY):
         if isinstance(path_or_data, (bytes, bytearray)):
@@ -69,7 +69,7 @@ class Npk(object):
                 self.data = f.read()
 
         if len(self.data) < 25:
-            raise ValueError("NPK file too small for header")
+            raise ValueError("NPK 文件过小，无法包含有效头部")
 
         (
             self.magic,
@@ -81,18 +81,18 @@ class Npk(object):
             self.encrypted,
         ) = struct.unpack_from(HDR_FORMAT, self.data, 0)
 
-        if self.magic != 0x4B50584E:  # 'NPXK'
-            raise ValueError(f"Invalid NPK magic: 0x{self.magic:08x}")
+        if self.magic != 0x4B50584E:  # 'NPXK' 魔数
+            raise ValueError(f"无效的 NPK 文件魔数: 0x{self.magic:08x}")
 
         table_size = self.entries_count * ENTRY_SIZE
         disk_size = (table_size + 15) & ~15 if self.encrypted else table_size
         if self.entry_offset + disk_size > len(self.data):
-            raise ValueError("Index table exceeds file boundary")
+            raise ValueError("索引表偏移超出文件边界")
 
         raw_table = bytes(self.data[self.entry_offset:self.entry_offset + disk_size])
         if self.encrypted:
             if AES is None:
-                raise ImportError("PyCryptodome (Crypto) is required for encrypted index NPKs")
+                raise ImportError("解密加密索引 NPK 需要 PyCryptodome (Crypto) 库")
             cipher = AES.new(index_key, AES.MODE_ECB)
             raw_table = cipher.decrypt(raw_table)
 
@@ -100,7 +100,7 @@ class Npk(object):
         self.list = list(struct.iter_unpack(ENTRY_FORMAT, raw_table))
 
     def raw(self, entry):
-        """Extract raw packed bytes for an entry (eid, offset, packed, raw, cp, cr, flags)."""
+        """提取条目的原始压缩字节流 (eid, offset, packed, raw, cp, cr, flags)。"""
         _, offset, packed, _, _, _, _ = entry
         return self.data[offset:offset + packed]
 

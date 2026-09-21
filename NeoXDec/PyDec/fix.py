@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
-"""NeoXDec.PyDec 脚本字节码修复与路径恢复工具。
+"""
+NeoXDec.PyDec 脚本字节码修复与路径恢复工具。
 
 功能：
 - 读取 NpkDec 解包出的原始 .nxc 裸脚本文件；

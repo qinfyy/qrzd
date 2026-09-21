@@ -1,8 +1,8 @@
 # NpkDec - NeoX NPK 容器纯解包模块
 
-**职责**：仅负责解包与解密网易 NeoX 引擎的 NPK 容器数据，**不修改、不反混淆脚本字节码**。
+解包与解密 NeoX 引擎的 NPK 容器数据。
 
-1. **脚本包 (`script.npk`)**：解密 Rotor 6 轮流密码、解压缩、反转字节流，将条目解出为未修改的原始 NeoX 编译脚本裸文件（`.nxc`）。字节码的混淆指令、融合指令保留给 `PyDec` 处理。
+1. **脚本包 (`script.npk`)**：解密 Rotor 6 轮流密码、解压缩、反转字节流，将条目解出为未修改的原始 NeoX 编译脚本裸文件（`.nxc`）。
 2. **资源包 (`assets/res/*.npk`)**：解密 AES-128-ECB 索引表，提取各条目内容（LZ4 解压缩或直存），自动探测资源格式（PNG, KTX, NTRK, DDS, CCZ, MP4, RIFF, XML, JSON 等）。
 
 ---
@@ -10,7 +10,7 @@
 ## 使用方法 (CLI)
 
 ```bash
-# 1. 解包 script.npk（解出未修复的 .nxc 裸脚本）
+# 1. 解包 script.npk
 python NpkDec/unpack.py path/to/assets/script.npk -o ./output/nxc --jobs 8
 
 # 2. 解包资源包 res/*.npk
