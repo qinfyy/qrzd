@@ -274,7 +274,7 @@ def _enc_instr(real, arg):
     if arg is None:
         return [(real, None)]
     if arg < 0:
-        raise ValueError(f'negative bytecode argument: {arg}')
+        raise ValueError(f'负数字节码参数: {arg}')
     chunks = []
     a = arg
     while a > 0xffff:
@@ -297,7 +297,7 @@ def fix_opcodes(code, strict=False, return_mapping=False):
         enc = code[i]
         if enc == ENC_EXTENDED_ARG:
             if i + 3 > n:
-                raise ValueError(f'truncated EXTENDED_ARG at {i}')
+                raise ValueError(f'EXTENDED_ARG 指令被截断，位于偏移量 {i}')
             part = code[i + 1] | (code[i + 2] << 8)
             ext = (ext << 16) | part
             ext_olds.append(i)
@@ -305,7 +305,7 @@ def fix_opcodes(code, strict=False, return_mapping=False):
             continue
         if enc == FUSED_LOAD_FAST_CONST:
             if i + 3 > n:
-                raise ValueError(f'truncated fused op at {i}')
+                raise ValueError(f'复合融合指令被截断，位于偏移量 {i}')
             arg = code[i + 1] | (code[i + 2] << 8)
             if ext:
                 arg = (ext << 16) | arg
@@ -322,9 +322,9 @@ def fix_opcodes(code, strict=False, return_mapping=False):
             continue
         if enc not in DEC:
             if strict:
-                raise ValueError(f'unknown encrypted opcode {enc} at {i}')
+                raise ValueError(f'未知的加密操作码 {enc}，位于偏移量 {i}')
             if ext_olds:
-                raise ValueError(f'EXTENDED_ARG before unknown opcode at {i}')
+                raise ValueError(f'未知操作码前出现 EXTENDED_ARG，位于偏移量 {i}')
             items.append({
                 'old': i,
                 'real': enc,
@@ -338,7 +338,7 @@ def fix_opcodes(code, strict=False, return_mapping=False):
         real = DEC[enc]
         if real >= 90:
             if i + 3 > n:
-                raise ValueError(f'truncated opcode at {i}')
+                raise ValueError(f'操作码被截断，位于偏移量 {i}')
             arg = code[i + 1] | (code[i + 2] << 8)
             if ext:
                 arg = (ext << 16) | arg
@@ -353,7 +353,7 @@ def fix_opcodes(code, strict=False, return_mapping=False):
             i += 3
         else:
             if ext_olds:
-                raise ValueError(f'EXTENDED_ARG before argumentless opcode at {i}')
+                raise ValueError(f'无参数操作码前出现 EXTENDED_ARG，位于偏移量 {i}')
             items.append({
                 'old': i,
                 'real': real,
@@ -364,7 +364,7 @@ def fix_opcodes(code, strict=False, return_mapping=False):
             i += 1
 
     if ext_olds:
-        raise ValueError(f'dangling EXTENDED_ARG at {ext_olds[0]}')
+        raise ValueError(f'悬空孤立的 EXTENDED_ARG，位于偏移量 {ext_olds[0]}')
 
     for it in items:
         it['oarg'] = it['arg']
@@ -379,7 +379,7 @@ def fix_opcodes(code, strict=False, return_mapping=False):
         else:
             continue
         if it['target'] not in starts:
-            raise ValueError(f"invalid jump target {it['target']} at {it['old']}")
+            raise ValueError(f"无效的跳转目标 {it['target']}，位于偏移量 {it['old']}")
 
     def sequence(it):
         if it.get('fused'):
@@ -406,7 +406,7 @@ def fix_opcodes(code, strict=False, return_mapping=False):
         old2new[len(code)] = new_len
         sizes = tuple(it['size'] for it in items)
         if sizes in seen_sizes:
-            raise ValueError('bytecode layout failed to converge')
+            raise ValueError('字节码布局迭代重定位无法收敛')
         seen_sizes.add(sizes)
         changed = False
         for it in items:
@@ -425,7 +425,7 @@ def fix_opcodes(code, strict=False, return_mapping=False):
         if not changed:
             break
     else:
-        raise ValueError('bytecode layout exceeded iteration bound')
+        raise ValueError('字节码布局重定位超出最大迭代次数限制')
 
     out = bytearray()
     ops = []
@@ -442,7 +442,7 @@ def fix_opcodes(code, strict=False, return_mapping=False):
 def relocate_lnotab(lnotab, old2new):
     """将 Python 2.7 无符号行号增量重定位到新的指令偏移量。"""
     if len(lnotab) % 2:
-        raise ValueError('odd lnotab length')
+        raise ValueError('lnotab 行号表长度为奇数')
     out = bytearray()
     old_addr = last_new = 0
     for addr_delta, line_delta in zip(lnotab[::2], lnotab[1::2]):
@@ -450,11 +450,11 @@ def relocate_lnotab(lnotab, old2new):
         if not line_delta:
             continue
         if old_addr not in old2new:
-            raise ValueError(f'lnotab offset is not an instruction boundary: {old_addr}')
+            raise ValueError(f'lnotab 偏移量不在指令边界上: {old_addr}')
         new_addr = old2new[old_addr]
         delta = new_addr - last_new
         if delta < 0:
-            raise ValueError('non-monotonic lnotab')
+            raise ValueError('lnotab 行号表非单调递增')
         while delta > 255:
             out.extend((255, 0))
             delta -= 255

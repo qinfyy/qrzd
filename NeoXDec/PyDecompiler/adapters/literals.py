@@ -17,7 +17,7 @@ def install():
     from uncompyle6.semantics.pysource import SourceWalker
 
     if xdis.__version__ != '6.1.7':
-        raise RuntimeError(f'literal adapter requires xdis 6.1.7; found {xdis.__version__}')
+        raise RuntimeError(f'字面量适配器需要 xdis 6.1.7，当前版本为: {xdis.__version__}')
 
     original_complex = _VersionIndependentUnmarshaller.t_complex
     original_const = SourceWalker.n_LOAD_CONST
@@ -35,10 +35,10 @@ def install():
         def get_float():
             length = self.fp.read(1)
             if len(length) != 1:
-                raise EOFError('truncated Python2 complex length')
+                raise EOFError('Python 2 复数字节长度被截断')
             raw = self.fp.read(length[0])
             if len(raw) != length[0]:
-                raise EOFError('truncated Python2 complex component')
+                raise EOFError('Python 2 复数分量数据被截断')
             return float(raw.decode('ascii'))
 
         return self.r_ref(complex(get_float(), get_float()), save_ref)

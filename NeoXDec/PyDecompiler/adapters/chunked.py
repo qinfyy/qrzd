@@ -33,7 +33,7 @@ def instructions(code):
             arg = raw[pos] | raw[pos + 1] << 8
             pos += 2
         if op == opc.EXTENDED_ARG:
-            raise ValueError("extended argument is not supported for chunking")
+            raise ValueError("分块反编译不支持扩展参数 EXTENDED_ARG")
         yield start, op, arg, pos
 
 
@@ -88,7 +88,7 @@ def stack_io(op, arg):
     if name in ("ROT_TWO", "ROT_THREE", "ROT_FOUR"):
         count = {"ROT_TWO": 2, "ROT_THREE": 3, "ROT_FOUR": 4}[name]
         return count, count
-    raise ValueError("unsupported linear opcode: " + name)
+    raise ValueError("分块反编译不支持的线性操作码: " + name)
 
 
 def module_cuts(code, target_bytes=1200):
@@ -98,7 +98,7 @@ def module_cuts(code, target_bytes=1200):
     if (len(ops) < 2 or ops[-1][1] != opc.opmap["RETURN_VALUE"]
             or ops[-2][1] != opc.opmap["LOAD_CONST"]
             or code.co_consts[ops[-2][2]] is not None):
-        raise ValueError("module must end with LOAD_CONST None; RETURN_VALUE")
+        raise ValueError("模块结尾必须是 LOAD_CONST None; RETURN_VALUE")
     end = ops[-2][0]
     offsets = {off for off, _, _, _ in ops} | {len(code.co_code)}
     prefix = 0
@@ -106,14 +106,14 @@ def module_cuts(code, target_bytes=1200):
         if op in opc.hasjabs or op in opc.hasjrel:
             target = arg if op in opc.hasjabs else nxt + arg
             if target not in offsets or target > end:
-                raise ValueError("unsupported control-flow target")
+                raise ValueError("不支持的控制流跳转目标")
             prefix = max(prefix, nxt, target)
         elif opc.opname[op] in ("END_FINALLY", "POP_BLOCK"):
             prefix = max(prefix, nxt)
         elif opc.opname[op] in ("RETURN_VALUE", "RAISE_VARARGS", "BREAK_LOOP", "YIELD_VALUE"):
-            raise ValueError("nonterminal transfer is not supported")
+            raise ValueError("不支持非终结控制流转移")
     if prefix not in offsets:
-        raise ValueError("prefix is not an instruction boundary")
+        raise ValueError("前缀未对齐到指令边界")
     safe = [prefix] if prefix else [0]
     depth = 0
     for off, op, arg, nxt in ops[:-2]:
@@ -121,12 +121,12 @@ def module_cuts(code, target_bytes=1200):
             continue
         pops, pushes = stack_io(op, arg)
         if depth < pops:
-            raise ValueError(f"nonempty-stack prefix or linear stack underflow at {off}")
+            raise ValueError(f"非空栈前缀或线性栈下溢，位于偏移量 {off}")
         depth += pushes - pops
         if depth == 0:
             safe.append(nxt)
     if depth:
-        raise ValueError("linear suffix does not finish at an empty stack")
+        raise ValueError("线性后缀未在空栈处结束")
     cuts = [0]
     for boundary in safe:
         if boundary - cuts[-1] >= target_bytes and boundary < end:
@@ -137,7 +137,7 @@ def module_cuts(code, target_bytes=1200):
             if start <= off < stop and op in opc.hasjabs + opc.hasjrel:
                 target = arg if op in opc.hasjabs else nxt + arg
                 if not start <= target < stop:
-                    raise ValueError("chunk crosses a control-flow edge")
+                    raise ValueError("分块越过了控制流分支边界")
     return cuts
 
 
@@ -156,7 +156,7 @@ def install(target_bytes=1200):
     from uncompyle6.parsers.treenode import SyntaxTree
     from uncompyle6.semantics.pysource import SourceWalker
     if uncompyle6.__version__ != "3.9.3":
-        raise RuntimeError(f"requires uncompyle6 3.9.3; found {uncompyle6.__version__}")
+        raise RuntimeError(f"分块适配器需要 uncompyle6 3.9.3，当前版本为: {uncompyle6.__version__}")
     control_flow_install()
     literal_install()
     original = SourceWalker.build_ast
@@ -185,7 +185,7 @@ def install(target_bytes=1200):
                 index += 1
             groups[index].append(token)
         if sum(map(len, groups)) != len(tokens) or any(not group for group in groups):
-            raise ValueError("token partition is incomplete")
+            raise ValueError("Token 划分不完整")
         before = hashlib.sha256(code.co_code).hexdigest()
         tree = SyntaxTree("stmts", [])
         timings = []
@@ -193,11 +193,11 @@ def install(target_bytes=1200):
             started = time.monotonic()
             subtree = original(self, list(group), customize, code, **arguments)
             if subtree.kind != "stmts":
-                raise ValueError("chunk did not parse as a statement sequence")
+                raise ValueError("分块未能解析为合法的语句序列")
             tree.extend(subtree)
             timings.append(round(time.monotonic() - started, 4))
         if hashlib.sha256(code.co_code).hexdigest() != before:
-            raise ValueError("chunk parsing mutated original code")
+            raise ValueError("分块解析意外修改了原始代码")
         _events.append(dict(code=code.co_name, file=code.co_filename,
                             cuts=cuts, token_counts=list(map(len, groups)), seconds=timings))
         return tree

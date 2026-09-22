@@ -86,7 +86,7 @@ class Reader(object):
 
     def obj(self, depth=0):
         if depth > 500:
-            raise ValueError('marshal recursion depth exceeded')
+            raise ValueError('marshal 递归深度超限')
         t = self.u8()
         self.tag_census[t] = self.tag_census.get(t, 0) + 1
         if t == T_NULL or t == T_NONE:
@@ -146,7 +146,7 @@ class Reader(object):
         if t == T_UNICODE:
             n = self.i32()
             if n < 0 or n > len(self.b) - self.i:
-                raise ValueError(f'invalid Unicode payload length: {n}')
+                raise ValueError(f'无效的 Unicode 数据长度: {n}')
             v = bytes(self.b[self.i:self.i + n])
             self.i += n
             return v.decode('utf-8', 'surrogatepass')
@@ -184,7 +184,7 @@ class Reader(object):
             return v * sign
         if t == T_CODE:
             return self.code(depth)
-        raise ValueError(f'unknown marshal tag {chr(t)!r} ({t}) at {self.i - 1}')
+        raise ValueError(f'未知的 marshal 标签 {chr(t)!r} ({t})，位于偏移量 {self.i - 1}')
 
     def code(self, depth=0):
         argcount = self.i32()
@@ -317,4 +317,4 @@ def _w(out, o):
         for x in o:
             _w(out, x)
     else:
-        raise TypeError(f'cannot marshal {type(o)!r}')
+        raise TypeError(f'无法对对象进行 marshal 序列化: {type(o)!r}')

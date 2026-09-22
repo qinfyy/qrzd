@@ -116,7 +116,7 @@ def install():
     from uncompyle6.semantics.pysource import SourceWalker
 
     if uncompyle6.__version__ != "3.9.3":
-        raise RuntimeError(f"Adapter requires uncompyle6 3.9.3; found {uncompyle6.__version__}")
+        raise RuntimeError(f"控制流适配器需要 uncompyle6 3.9.3，当前版本为: {uncompyle6.__version__}")
 
     original_build_ast = SourceWalker.build_ast
     original_detect = Scanner2.detect_control_flow
