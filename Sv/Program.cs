@@ -9,10 +9,11 @@ try
 {
     WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
     string contentRootPath = builder.Environment.ContentRootPath;
-    Config.Initialize(builder.Configuration, contentRootPath);
+    Config.Initialize(contentRootPath, builder.Environment.EnvironmentName);
+    builder.Configuration.AddConfiguration(Config.Root);
 
     Log.Logger = new LoggerConfiguration()
-        .ReadFrom.Configuration(builder.Configuration)
+        .ReadFrom.Configuration(Config.Root)
         .Enrich.FromLogContext()
         .WriteTo.Console()
         .WriteTo.File(Path.Combine(builder.Environment.ContentRootPath, "logs", "sv-.log"),
@@ -40,7 +41,7 @@ try
 
     app.MapGet("/", () => Results.Text("Hello World", "text/plain; charset=utf-8"));
     app.MapDispatchEndpoints();
-    app.MapFallback(() => Results.Json(new { error = "not_found" }, statusCode: 404));
+    app.MapFallback(() => Results.Text($"404 not found", "text/plain; charset=utf-8", statusCode: StatusCodes.Status404NotFound));
 
     Log.Information("QRZD HTTP 监听 {Port}；发布区服 {ServerId} -> {Host}:{GatewayPort}；基础 Gateway 登录启用",
         Config.Server.HttpPort, Config.Server.ServerId, Config.Server.AdvertiseHost, Config.Server.GatewayPort);

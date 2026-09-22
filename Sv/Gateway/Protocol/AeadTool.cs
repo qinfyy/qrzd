@@ -8,6 +8,7 @@ using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.OpenSsl;
 using Org.BouncyCastle.X509;
+using Mobile.Server;
 
 namespace Sv.Gateway.Protocol;
 

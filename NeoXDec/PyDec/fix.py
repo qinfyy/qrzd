@@ -166,11 +166,6 @@ def main():
     parser = argparse.ArgumentParser(
         description="NeoX 脚本字节码修复与 Pyc 重建工具 (PyDec - 负责脚本修复与路径恢复)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-使用示例:
-  # 批量修复 NpkDec 解包出的 .nxc 目录，自动解析 co.filename 恢复完整工程目录树:
-  python fix.py D:/Reverse2/unpack -o D:/Reverse2/pyc --jobs 4
-        """
     )
     parser.add_argument('input', type=Path, help="输入的 .nxc 文件路径，或包含 .nxc 文件的目录")
     parser.add_argument('-o', '--out', type=Path, required=True, help="修复后 .pyc 文件的输出目标目录")

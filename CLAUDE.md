@@ -159,11 +159,13 @@ This file provides architecture standards, domain rules, and development guideli
 
 > [!CAUTION]
 > ### 🚨 红线 8：加解密与协议收敛
-> 所有网络协议加解密（RSA-OAEP、RC4、MD5）必须唯一收敛在 `Gateway/Protocol/AeadTool.cs`，严禁在其他地方另起炉灶编写冗余的加解密工具类。
+> 所有网络协议加解密（RSA-OAEP、RC4、MD5）必须唯一收敛在 `Gateway/Protocol/AeadTool.cs`，其他协议基础工具放在 `Gateway/Protocol/`目录下，严禁在其他地方另起炉灶编写冗余的加解密工具类和工具函数。
 
 > [!CAUTION]
-> ### 🚨 红线 9：保持 Git 提交聚焦且干净
-> 提交代码前必须确认工作区无无关临时文件、编译锁已释放、测试正常。提交信息必须清晰准确地反映重构与功能演进。
+> ### 🚨 红线 10：严禁擅自更新 README.md 与 CLAUDE.md
+> `README.md` 与 `CLAUDE.md` 分别是项目的对外说明与全局 Agent 规则基准。
+> Agent 严禁在日常开发、功能迭代或代码重构中随意自行更新 `README.md` 和 `CLAUDE.md`。
+> 必须在用户明确发出指令要求更新时，才允许对相应文档进行修改。
 
 ---
 

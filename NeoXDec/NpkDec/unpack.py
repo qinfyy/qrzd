@@ -265,16 +265,8 @@ def is_script_npk(npk_path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="NeoX NPK 归档解包工具 (NpkDec - 仅解包，不修复脚本)",
+        description="NeoX NPK 归档解包工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-使用示例:
-  # 解包脚本包 script.npk (生成原始 .nxc 文件):
-  python unpack.py D:/assets/script.npk -o D:/Reverse2/unpack --jobs 4
-
-  # 解包资源包 (解出各类多媒体与配置文件):
-  python unpack.py D:/assets/res/sound.npk -o D:/Reverse2/res
-        """
     )
     parser.add_argument('input', type=Path, help="输入的 NPK 文件路径，或包含多个 NPK 文件的目录")
     parser.add_argument('-o', '--out', type=Path, required=True, help="解包输出的目标目录")

@@ -1,7 +1,8 @@
 using Google.Protobuf;
 using MongoDB.Bson;
 using Sv.Gateway.Protocol;
-using ProtoVoid = Sv.Gateway.Protocol.Void;
+using Mobile.Server;
+using ProtoVoid = Mobile.Server.Void;
 
 namespace Sv.Gateway.Packets;
 

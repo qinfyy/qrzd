@@ -242,18 +242,7 @@ def decompile_batch(input_path, output_dir, jobs=4, chunked=False, resume=False,
 def main():
     parser = argparse.ArgumentParser(
         description="NeoX Python 字节码反编译器 (PyDecompiler - 负责反编译修复后的 Pyc)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-使用示例:
-  # 批量反编译 PyDec 修复出的 pyc 目录:
-  python decompile.py D:/Reverse2/pyc -o D:/Reverse2/py --jobs 4
-
-  # 遇到超大型复杂模块 (如 CEGUI) 启用分块反编译:
-  python decompile.py D:/Reverse2/pyc -o D:/Reverse2/py --chunked --jobs 4
-
-  # 断点续跑 (跳过已经反编译成功的文件):
-  python decompile.py D:/Reverse2/pyc -o D:/Reverse2/py --resume --jobs 4
-        """
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument('input', type=Path, help="输入的 .pyc 文件路径，或包含 .pyc 文件的根目录")
     parser.add_argument('-o', '--out', type=Path, required=True, help="反编译输出 .py 源码的目标目录")
