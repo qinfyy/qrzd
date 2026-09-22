@@ -57,7 +57,6 @@ public sealed partial class GameDatabase
                 db.Database.ExecuteSqlRaw("PRAGMA foreign_keys=ON;");
                 db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
                 db.Database.ExecuteSqlRaw("PRAGMA busy_timeout=5000;");
-                db.Database.ExecuteSqlRaw("INSERT OR IGNORE INTO sqlite_sequence (name, seq) VALUES ('Players', 10000);");
             }
             finally
             {

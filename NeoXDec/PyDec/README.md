@@ -1,4 +1,4 @@
-# PyDec - NeoX 脚本字节码修复模块
+# PyDec
 
 将 `NpkDec` 解包出的未修改 NeoX 编译脚本裸文件（`.nxc`）反混淆并重新组装为标准 CPython 2.7 `.pyc` 文件。
 

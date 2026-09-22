@@ -14,6 +14,8 @@ namespace Sv.Gateway;
 /// </summary>
 public sealed class GatewayRouter
 {
+    public static GatewayRouter Instance { get; } = new();
+
     private static readonly ILogger Logger = Log.ForContext<GatewayRouter>();
 
     private static readonly string[] MethodNames =
@@ -43,16 +45,14 @@ public sealed class GatewayRouter
         string? method = Methods.GetValueOrDefault(digest);
         if (method is null)
         {
-            Logger.Warning("未实现 Gateway 实体 RPC md5={MethodHash}，连接 {ConnectionId}，参数长度 {PayloadLength}",
-                digest, session.ConnectionId, message.Parameters.Length);
+            Logger.Warning("未实现 Gateway RPC 方法 {MethodHash}，连接 {ConnectionId}，参数长度 {PayloadLength}", digest, session.ConnectionId, message.Parameters.Length);
             return;
         }
 
         bool canRunBeforeLogin = method is "login" or "loginWithUrs";
         if (!canRunBeforeLogin && session.Player is null)
         {
-            Logger.Warning("未认证连接请求玩家方法，连接 {ConnectionId}，方法 {Method}",
-                session.ConnectionId, method);
+            Logger.Warning("未认证连接请求玩家方法，连接 {ConnectionId}，方法 {Method}", session.ConnectionId, method);
             session.Close();
             return;
         }

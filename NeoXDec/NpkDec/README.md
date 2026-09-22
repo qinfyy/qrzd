@@ -1,4 +1,4 @@
-# NpkDec - NeoX NPK 容器纯解包模块
+# NpkDec
 
 解包与解密 NeoX 引擎的 NPK 容器数据。
 

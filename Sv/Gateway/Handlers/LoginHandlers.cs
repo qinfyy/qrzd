@@ -1,5 +1,6 @@
 using MongoDB.Bson;
 using Serilog;
+using Sv.Configuration;
 using Sv.Database;
 using Sv.Game;
 using Sv.Gateway.Packets;
@@ -12,9 +13,9 @@ public sealed class LoginHandlers
 
     public void OnLogin(GatewaySession session, LoginRequestPacket request)
     {
-        if (request.ServerId != session.Options.ServerId)
+        if (request.ServerId != Config.Server.ServerId)
         {
-            session.SendPack(new LoginFailPacket(session.AccountEntityId, "区服参数不正确"));
+            session.SendPack(new LoginFailPacket(session.AccountEntityId, "登录区服不对"));
             return;
         }
 
@@ -29,12 +30,12 @@ public sealed class LoginHandlers
                 player.OnLogin();
                 player.Save();
 
-                session.SendPack(new ClientAvatarPacket(session.AvatarEntityId!, player, session.Options));
+                session.SendPack(new ClientAvatarPacket(session.AvatarEntityId!, player, Config.Server));
                 session.SendPack(new BecomePlayerPacket(session.AvatarEntityId!));
             }
 
             session.SetStage("avatar_sent");
-            Logger.Information("Gateway 连接 {ConnectionId} 账号 UID={UserId} 登录", session.ConnectionId, player.Uid);
+            Logger.Information("Gateway 连接 {ConnectionId} 账号 UID {UserId} 登录", session.ConnectionId, player.Uid);
         }
         catch (Exception exception)
         {

@@ -1,28 +1,28 @@
-# 《永远的 7 日之都》网络线缆协议与 RPC 技术分析 (QRZD Network Wire Protocol & RPC Analysis)
+# QRZD Network Wire Protocol Analysis
 
-本文档系统性剖析网易自研 NeoX 引擎手游《永远的 7 日之都》（客户端包体代号 `f7` / `qrzd`）的底层网络通信拓扑、TCP 线缆二进制分帧机制、递进式传输安全握手体系（RSA-OAEP + RC4 流密码 + 连续 ZLib 压缩）、Protobuf 底层载荷规范、分布式实体 RPC 与 MD5 方法哈希映射，以及角色创建与“进门”生命周期。
+本文档描述手游《永远的 7 日之都》的底层网络通信拓扑、TCP 线缆二进制分帧机制、递进式传输安全握手体系、Protobuf 底层载荷规范、分布式实体 RPC 与 MD5 方法哈希映射，以及角色创建与进门生命周期。
 
 ---
 
 ## 1. 网络传输拓扑与通道划分
 
-《永远的 7 日之都》网络架构采用“**无状态 HTTP 调度/认证 + 有状态 TCP 分布式实体网关**”的双层通信拓扑：
+qrzd 网络架构采用“**无状态 HTTP 调度/认证 + 有状态 TCP 分布式实体网关**”的双层通信拓扑：
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        Client Application (NeoX)                       │
+│                       Client Application (NeoX)                        │
 └───────────────────┬────────────────────────────────┬───────────────────┘
                     │                                │
-          HTTP/HTTPS (端口 21000)               TCP (端口 4120)
+          HTTP/HTTPS (端口 443)               TCP (端口 4120)
                     │                                │
 ┌───────────────────▼───────────┐    ┌───────────────▼───────────────────┐
-│     HTTP Dispatch & SDK       │    │        Game TCP Gateway           │
+│     HTTP Dispatch & SDK       │    │         Game TCP Gateway          │
 │  - /server_list_android.txt   │    │  - 动态会话协商与密钥交换         │
-│    (区服列表、状态与网关导流) │    │  - RC4 全双工对称流加密          │
+│    (区服列表、状态与网关导流) │    │  - RC4 全双工对称流加密           │
 │  - /announcement_android      │    │  - RFC 1950 连续 ZLib 压缩流      │
 │    (运营活动与停服公告)       │    │  - Protobuf 网关控制与分发        │
-│  - /account (HMAC 鉴权查询)   │    │  - NeoX 分布式实体 RPC (MD5 散列) │
-│  - 网易 UniSDK / URS 认证服务 │    │  - 角色状态同步、心跳与可靠 RPC   │
+│                               │    │  - NeoX 分布式实体 RPC (MD5 散列) │
+│                               │    │  - 角色状态同步、心跳与可靠 RPC   │
 └───────────────────────────────┘    └───────────────────────────────────┘
 ```
 
@@ -30,9 +30,9 @@
 
 | 通道名称 | 传输层协议 | 默认端口 | 编解码与安全机制 | 业务职责说明 |
 | :--- | :---: | :---: | :--- | :--- |
-| **HTTP Dispatch** | HTTP/1.1 | 21000 | 明文 CSV / JSON，部分接口带 HMAC-SHA256 签名 | 下发区服列表、发布地址分配、公告查询、免 SDK 账号角色映射 |
+| **HTTP Dispatch** | HTTP/1.1 | 443 | 明文 CSV / JSON，部分接口带 HMAC-SHA256 签名 | 下发区服列表、发布地址分配、公告查询、免 SDK 账号角色映射 |
 | **TCP Gateway** | TCP | 4120 | RSA-OAEP + RC4 + ZLib + Protobuf + BSON | 核心游戏长连接，承载账号握手、实体生命周期、角色快照与游戏主业务 |
-| **UniSDK / URS** | HTTPS | 443 | TLS 1.2/1.3 + 网易 SAUTH Token | 官方渠道通行证登录、实名认证、防沉迷上报（本地调试模式已 Bypass） |
+| **UniSDK / URS** | HTTPS | 443 | TLS 1.2/1.3  | 官方渠道通行证登录、实名认证、防沉迷上报（本地调试模式已 Bypass） |
 
 ---
 
@@ -61,7 +61,7 @@
 
 ### 2.3 传输层 Method 映射表
 
-网关与客户端之间预定义的顶层传输层 Method ID（对应 `gateway.proto` 描述符）：
+网关与客户端之间预定义的顶层传输层 Method ID：
 
 | Method ID | 方向 | 对应 Proto 接口 | 载荷消息类型 | 语义说明 |
 | :---: | :---: | :--- | :--- | :--- |
@@ -80,7 +80,7 @@
 
 ## 3. 递进式传输安全握手体系 (Handshake & Security Pipeline)
 
-《永远的 7 日之都》设计了一套由浅入深、分阶段逐步激活加密与压缩的递进式握手协议：
+qrzd设计了一套由浅入深、分阶段逐步激活加密与压缩的递进式握手协议：
 
 ```mermaid
 sequenceDiagram
@@ -228,7 +228,7 @@ message EntityInfo {
 
 ## 5. NeoX 分布式实体 RPC 与 MD5 方法哈希映射
 
-《永远的 7 日之都》基于网易 NeoX 分布式实体架构（Python 层 `GateClient`、`Entity`、`ClientAccount`、`ClientAvatar`）。与 miHoYo 的 CmdId 不同，NeoX 采用了**实体对象寻址 + 方法名哈希**的模型。
+qrzd 基于 NeoX 分布式实体架构（Python 层 `GateClient`、`Entity`、`ClientAccount`、`ClientAvatar`）。与传统的 CmdId 不同，NeoX 采用了**实体对象寻址 + 方法名哈希**的模型。
 
 ### 5.1 实体对象寻址 (Entity ID)
 - 每个在网络中可见的实体具有全局唯一 ID，线缆上传输为 **12 字节 MongoDB ObjectId 二进制格式**。
@@ -267,7 +267,7 @@ $$\text{MethodHash} = \text{MD5}(\text{Encoding.UTF8.GetBytes}(\text{methodName}
 
 ## 6. 混合序列化体系 (BSON 与 MessagePack+ZLib 双模架构)
 
-在数据层，《永远的 7 日之都》没有单一依赖 Protobuf，而是针对不同场景采用了针对性的双模序列化策略：
+在数据层，qrzd 没有单一依赖 Protobuf，而是针对不同场景采用了针对性的双模序列化策略：
 
 ```
                              序列化数据分类
@@ -306,7 +306,7 @@ $$\text{MethodHash} = \text{MD5}(\text{Encoding.UTF8.GetBytes}(\text{methodName}
 
 ## 7. 登录、进门与生命周期全时序实战 (In-Game Lifecycle)
 
-完整进入“交界都市”（大地图主界面）的全链路闭环时序如下：
+完整进门全链路闭环时序如下：
 
 ```mermaid
 sequenceDiagram
@@ -404,10 +404,3 @@ sequenceDiagram
     }
 }
 ```
-
-### 7.2 可靠 RPC (Reliable RPC) 与 UI 锁解锁机制
-- **UI 锁触发**：进入场景时，客户端 `EventTriggerMember.py` 触发 `eventOnEnterEmergency` -> `pullEvents`，立即调用 `gg.ui.lock('pullEvents')` 弹出旋转遮罩层。
-- **双向响应闭环**：
-  1. 客户端通过 `reliableRpcCall` 发送子方法 `pullEvents`，携带请求序号 `r` 与回调 ID `_cbid_`；
-  2. 服务端**必须立即响应 `reliableRpcAck`**（携带序号 `s = r`），阻止客户端在超时后触发 5 次重传断线；
-  3. 服务端**必须下发 `pullEventsReply` 并精确回显 `_cbid_`**，客户端收到后才会触发回调，调用 `gg.ui.unlock('pullEvents')` 彻底解开 UI 锁，向指挥使呈现完整的交界都市主城。

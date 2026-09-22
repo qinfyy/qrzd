@@ -1,10 +1,13 @@
-using CsvHelper.Configuration.Attributes;
+using System.Text.Json;
 
 namespace Sv.Resources.Tables;
 
 public abstract class TableBase
 {
     public abstract int GetId();
+
+    /// <summary>由资源加载器在 OnLoad 前传入 DBX 原始键（适用于复合键或表数据中未显式包含主键字段的表）</summary>
+    public virtual void SetKey(JsonElement key) { }
 
     /// <summary>阶段 1：基础反序列化完成后触发，用于字段解析、枚举映射与字段预计算</summary>
     public virtual void OnLoad() { }
@@ -14,18 +17,4 @@ public abstract class TableBase
 
     /// <summary>阶段 3：全部表关联建立完成后触发，用于跨表约束、业务边界与资源完整性校验；跨表查询直接访问 GameTableCatalog.Instance</summary>
     public virtual void Verification() { }
-}
-
-public abstract class TableToolsTableBase : TableBase
-{
-    /// <summary>客户端 TableTools 的行序（客户端读取顺序），派生索引字段，不参与 TSV 读写。</summary>
-    [Ignore]
-    public int DataItemIndex { get; private set; }
-
-    public void SetDataItemIndex(int index) => DataItemIndex = index;
-
-    public int GetDataItemIndex() => DataItemIndex;
-
-    // 未重写 GetId 的 TableTools表兜底
-    public override int GetId() => DataItemIndex;
 }

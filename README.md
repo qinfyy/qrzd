@@ -1,6 +1,6 @@
 # QRZD
 
-`QRZD` 是针对移动端都市幻想 RPG 手游《永远的 7 日之都》进行协议逆向研究、网络线缆分析与服务端环境模拟的开源研究项目
+`QRZD` 是针对移动端都市幻想 RPG? AVG 手游《永远的 7 日之都》进行协议逆向研究、网络线缆分析与服务端环境模拟的 开源? 研究项目
 
 ---
 
@@ -8,14 +8,7 @@
 
 - **现代 .NET 技术栈**：基于 .NET 10 (C# 13) 与 ASP.NET Core 构建，利用高性能 Socket 与异步 I/O 提供低延迟高并发网关服务。
 - **DDD 领域聚合根架构**：服务端领域层严格遵循统一标准，以 `Player` 为核心聚合根，按模块组合 `CityLogic`、`HeroMgrLogic`、`InventoryLogic`、`WeekNumLogic` 等充血子系统。
-- **单表 BLOB 高性能持久化**：采用经典商业游戏服务端设计，以 `ServerProto.proto`（`PlayerSaveData`）二进制 Protobuf 序列化流持久化存储于 SQLite，实现毫秒级原子存盘与向前向后版本兼容。
-- **攻克 NeoX 分布式实体网络协议**：
-  - **递进式传输安全握手**：明文种子协商 -> RSA-OAEP (SHA-1) 密钥交换 -> RC4 全双工流密码。
-  - **全会话连续 ZLib 字典流压缩**：RFC 1950 标准，跨报文持续维护解压字典。
-  - **双维度分布式实体寻址**：12 字节 MongoDB ObjectId 实体寻址 + 16 字节 MD5 方法名散列。
-  - **动态索引注册 (`reg_md5_index`)**：支持热点 RPC 索引缓存，深度压榨网络带宽。
-  - **混合三模序列化**：网关控制用 Protobuf，RPC 参数用 BSON，全量角色快照用 MessagePack + ZLib。
-- **可靠 RPC 闭环与“进门”支持**：原生处理 `reliableRpcCall` 与 `pullEventsReply`（携带 `_cbid_`），彻底解锁客户端大地图场景“等待响应中...”遮罩层。
+- **单表 BLOB 高性能持久化**：采用经典商业游戏服务端设计，以二进制 Protobuf 序列化流持久化存储于 SQLite，实现毫秒级原子存盘与向前向后版本兼容。
 
 ---
 
@@ -100,7 +93,7 @@ dotnet run --project Sv
 }
 ```
 
-> **提示**：若在局域网真机或跨设备模拟器测试，需将 `AdvertiseHost` 修改为局域网可访问 IP。
+> **注意**：`AdvertiseHost` 应设置为客户端能实际路由访问的主机 IP 或域名（如局域网 IP），切勿填写 `0.0.0.0`。
 
 ### 4. 客户端连接
 
@@ -113,8 +106,7 @@ dotnet run --project Sv
 
 ## 文档索引
 
-- **网络线缆与 RPC 协议深度分析**：请参阅 [docs/QEZD_NETWORK_PROTOCOL_ANALYSIS.md](docs/QEZD_NETWORK_PROTOCOL_ANALYSIS.md)，包含握手流程、RC4/ZLib 连续流、MD5 方法散列与完整实体时序。
-- **开发者与 Agent 架构规范**：请参阅 [CLAUDE.md](CLAUDE.md)。
+- **网络协议分析**：请参阅 [网络协议分析](docs/QRZD_NETWORK_PROTOCOL_ANALYSIS.md)，包含握手流程、RC4/ZLib 连续流、MD5 方法散列与完整实体时序。
 
 ---
 
@@ -123,6 +115,14 @@ dotnet run --project Sv
 1. 本项目仅供计算机网络通信协议分析、逆向工程技术研究以及个人学习交流使用。
 2. 本项目不包含任何商业游戏的专有受版权保护资产（如音频、模型、贴图及客户端二进制文件）。
 3. 请勿将本项目用于任何形式的商业用途或侵犯第三方版权持有者权益的活动。
+
+## 贡献
+
+开发时，如果您使用 Vibe Coding 进行开发，请让 Agent 遵守各 CLAUDE.md 中的开发约定，特别是关于 Sv 代码结构的部分。
+
+## 鸣谢
+
+感谢 ChatGPT、Gemini、Claude、GLM、MiniMax 和 DeepSeek 在项目文档维护，代码实现与逆向分析过程中提供的帮助。所有 Markdown 文档和一大半的代码都是它们写的。
 
 ## 许可
 

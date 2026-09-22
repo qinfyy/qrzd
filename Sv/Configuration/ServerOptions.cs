@@ -33,7 +33,7 @@ public sealed class ServerOptions
     public int ServerId { get; init; } = 5004;
     public string ServerName { get; init; } = "本地测试服";
     public string AnnouncementTitle { get; init; } = "本地测试";
-    public string AnnouncementText { get; init; } = "QRZD 本地基础登录测试。游戏玩法尚未实现。";
+    public string AnnouncementText { get; init; } = "#s30QRZD 本地测试服#r#s24已实现进门";
     public string AccountSignatureKey { get; init; } = "xxlr5ob%g(q!6*8wiu8mz)uz3lu5y^&y";
     public int AccountClockSkewSeconds { get; init; } = 300;
 

@@ -3,6 +3,8 @@ using Sv.Configuration;
 using Sv.Database;
 using Sv.Gateway;
 using Sv.Http;
+using Sv.Resources;
+using Sv.Resources.Tables;
 
 Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
 try
@@ -25,8 +27,11 @@ try
     // 初始化数据库单例
     GameDatabase.Initialize(Config.Database);
 
-    builder.Services.AddSingleton<GatewayRouter>();
-    builder.Services.AddHostedService<GatewayHostedService>();
+    // 初始化策划配置表资源
+    ResourcesLoader.Initialize(Config.GameData);
+
+    builder.Services.AddSingleton<GatewayHostedService>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayHostedService>());
 
     builder.WebHost.UseUrls($"http://0.0.0.0:{Config.Server.HttpPort}");
     builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 16 * 1024);
@@ -43,8 +48,7 @@ try
     app.MapDispatchEndpoints();
     app.MapFallback(() => Results.Text($"404 not found", "text/plain; charset=utf-8", statusCode: StatusCodes.Status404NotFound));
 
-    Log.Information("QRZD HTTP 监听 {Port}；发布区服 {ServerId} -> {Host}:{GatewayPort}；基础 Gateway 登录启用",
-        Config.Server.HttpPort, Config.Server.ServerId, Config.Server.AdvertiseHost, Config.Server.GatewayPort);
+    Log.Information("区服 {ServerId} -> {Host}:{GatewayPort}", Config.Server.ServerId, Config.Server.AdvertiseHost, Config.Server.GatewayPort);
 
     await app.RunAsync();
 }

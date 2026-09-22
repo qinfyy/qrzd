@@ -16,10 +16,38 @@ public sealed class GameTableCatalog
 
     public bool IsLoaded { get; internal set; }
 
-    // TSV 数据表按 ID 索引：Type -> FrozenDictionary<int, T>
-    private readonly Dictionary<Type, object> _loadedTables = [];
+    private interface ITableEntry
+    {
+        object RawMap { get; }
+        void FinalizeRows();
+        void VerifyRows();
+    }
 
-    // JSON 复杂配置：Type -> 反序列化对象
+    private sealed class TableEntry<T>(FrozenDictionary<int, T> map) : ITableEntry where T : TableBase
+    {
+        public object RawMap => map;
+
+        public void FinalizeRows()
+        {
+            foreach (T row in map.Values)
+            {
+                row.OnFinalize();
+            }
+        }
+
+        public void VerifyRows()
+        {
+            foreach (T row in map.Values)
+            {
+                row.Verification();
+            }
+        }
+    }
+
+    // Type -> TableEntry (FrozenDictionary<int, T>)
+    private readonly Dictionary<Type, ITableEntry> _loadedTables = [];
+
+    // Type -> 反序列化对象
     private readonly Dictionary<Type, object> _loadedJsonData = [];
 
     public int LoadedTableCount => _loadedTables.Count;
@@ -28,7 +56,7 @@ public sealed class GameTableCatalog
 
     public T? GetDataById<T>(int id) where T : class
     {
-        if (_loadedTables.TryGetValue(typeof(T), out object? table) && table is FrozenDictionary<int, T> map)
+        if (_loadedTables.TryGetValue(typeof(T), out ITableEntry? entry) && entry.RawMap is FrozenDictionary<int, T> map)
         {
             return map.GetValueOrDefault(id);
         }
@@ -38,7 +66,7 @@ public sealed class GameTableCatalog
 
     public bool TryGetDataById<T>(int id, [NotNullWhen(true)] out T? data) where T : class
     {
-        if (_loadedTables.TryGetValue(typeof(T), out object? table) && table is FrozenDictionary<int, T> map)
+        if (_loadedTables.TryGetValue(typeof(T), out ITableEntry? entry) && entry.RawMap is FrozenDictionary<int, T> map)
         {
             return map.TryGetValue(id, out data);
         }
@@ -50,7 +78,7 @@ public sealed class GameTableCatalog
     /// <summary>获取全量行集合</summary>
     public IReadOnlyList<T> GetAllData<T>() where T : class
     {
-        if (_loadedTables.TryGetValue(typeof(T), out object? table) && table is FrozenDictionary<int, T> map)
+        if (_loadedTables.TryGetValue(typeof(T), out ITableEntry? entry) && entry.RawMap is FrozenDictionary<int, T> map)
         {
             return map.Values is IReadOnlyList<T> list ? list : [.. map.Values];
         }
@@ -58,10 +86,10 @@ public sealed class GameTableCatalog
         throw new KeyNotFoundException($"资源表类型 {typeof(T).FullName} 尚未注册或未加载");
     }
 
-    /// <summary>直接获取整张表的只读字典（用于极少数需要遍历键值对的场景）</summary>
+    /// <summary>直接获取整张表的只读字典</summary>
     public FrozenDictionary<int, T> GetTable<T>() where T : class
     {
-        if (_loadedTables.TryGetValue(typeof(T), out object? table) && table is FrozenDictionary<int, T> map)
+        if (_loadedTables.TryGetValue(typeof(T), out ITableEntry? entry) && entry.RawMap is FrozenDictionary<int, T> map)
         {
             return map;
         }
@@ -71,7 +99,7 @@ public sealed class GameTableCatalog
 
     public bool TryGetTable<T>([NotNullWhen(true)] out FrozenDictionary<int, T>? table) where T : class
     {
-        if (_loadedTables.TryGetValue(typeof(T), out object? value) && value is FrozenDictionary<int, T> map)
+        if (_loadedTables.TryGetValue(typeof(T), out ITableEntry? entry) && entry.RawMap is FrozenDictionary<int, T> map)
         {
             table = map;
             return true;
@@ -81,7 +109,7 @@ public sealed class GameTableCatalog
         return false;
     }
 
-    /// <summary>获取 JSON 配置对象（直接返回强类型实体，彻底干掉包装壳）</summary>
+    /// <summary>获取 JSON 配置对象（直接返回强类型实体）</summary>
     public T GetJson<T>() where T : class
     {
         if (_loadedJsonData.TryGetValue(typeof(T), out object? data) && data is T typedData)
@@ -106,7 +134,7 @@ public sealed class GameTableCatalog
 
     internal void PushTable<T>(Dictionary<int, T> dataMap) where T : TableBase
     {
-        if (!_loadedTables.TryAdd(typeof(T), dataMap.ToFrozenDictionary()))
+        if (!_loadedTables.TryAdd(typeof(T), new TableEntry<T>(dataMap.ToFrozenDictionary())))
         {
             throw new InvalidOperationException($"表类型 {typeof(T).FullName} 已经注册");
         }
@@ -123,24 +151,18 @@ public sealed class GameTableCatalog
     /// <summary>在全量表与 JSON 加载完成后广播 OnFinalize，用于构建跨表外键与双向关联</summary>
     public void BroadcastOnFinalize()
     {
-        foreach (System.Collections.IDictionary table in _loadedTables.Values)
+        foreach (ITableEntry entry in _loadedTables.Values)
         {
-            foreach (TableBase row in table.Values)
-            {
-                row.OnFinalize();
-            }
+            entry.FinalizeRows();
         }
     }
 
     /// <summary>在 OnFinalize 全部完成后广播 Verification，用于跨表完整性校验</summary>
     public void BroadcastVerification()
     {
-        foreach (System.Collections.IDictionary table in _loadedTables.Values)
+        foreach (ITableEntry entry in _loadedTables.Values)
         {
-            foreach (TableBase row in table.Values)
-            {
-                row.Verification();
-            }
+            entry.VerifyRows();
         }
     }
 }

@@ -1,4 +1,4 @@
-# PyDecompiler - Python 字节码反编译模块
+# PyDecompiler
 
 将 `PyDec` 修复出的标准 Python 2.7 字节码（`.pyc`）反编译为可读的 Python 源代码（`.py`）。
 

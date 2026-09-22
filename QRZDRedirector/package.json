@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "frida-compile FridaScript.js -o ./dist/FridaScript.js -S",
-    "prod": "node prod.js",
+    "build": "mkdir dist && frida-compile FridaScript.js -o ./dist/FridaScript.js -S",
     "postinstall": "patch-package"
   },
   "engines": {

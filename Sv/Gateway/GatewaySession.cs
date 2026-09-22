@@ -21,6 +21,7 @@ public readonly record struct GatewayFrame(ushort Method, byte[] Payload);
 /// </summary>
 public sealed class GatewaySession
 {
+    private readonly ILogger _logger;
     private readonly NetworkStream _stream;
     private readonly Lock _sendLock = new();
     private readonly Queue<GatewayFrame> _pendingFrames = new();
@@ -36,23 +37,18 @@ public sealed class GatewaySession
     private Inflater? _inflater;
     private int _closed;
 
-    public GatewaySession(long connectionId, NetworkStream stream, GatewayHostedService server, GatewayRouter router, ServerOptions options)
+    public GatewaySession(long connectionId, NetworkStream stream, GatewayHostedService server)
     {
         ConnectionId = connectionId;
+        _logger = Log.ForContext<GatewaySession>().ForContext("ConnectionId", connectionId);
         _stream = stream;
         Server = server;
-        Router = router;
-        Options = options;
         AccountEntityId = ByteString.CopyFrom(ObjectId.GenerateNewId().ToByteArray());
     }
 
     public long ConnectionId { get; }
 
     public GatewayHostedService Server { get; }
-
-    public GatewayRouter Router { get; }
-
-    public ServerOptions Options { get; }
 
     public ByteString AccountEntityId { get; }
 
@@ -123,7 +119,7 @@ public sealed class GatewaySession
 
         IMessage message = packet.CreateMessage();
         byte[] payload = message.ToByteArray();
-        if (payload.Length + 2 > Options.GatewayMaxFrameBytes)
+        if (payload.Length + 2 > Config.Server.GatewayMaxFrameBytes)
         {
             throw new InvalidDataException("发送帧过大");
         }
@@ -193,7 +189,7 @@ public sealed class GatewaySession
                 }
 
                 EntityMessage message = EntityMessage.Parser.ParseFrom(frame.Payload);
-                Router.Route(this, message);
+                GatewayRouter.Instance.Route(this, message);
             }
         }
         finally
@@ -208,7 +204,7 @@ public sealed class GatewaySession
 
     private async Task HandshakeAsync()
     {
-        // 1. 首包 seed_request
+        // 首包 seed_request
         GatewayFrame frame = await ReadExactFrameAsync();
         if (frame.Method != 0 || frame.Payload.Length != 0)
         {
@@ -219,7 +215,7 @@ public sealed class GatewaySession
         SendPack(new SessionSeedReplyPacket(seed));
         Stage = "session_key";
 
-        // 2. session_key
+        // session_key
         frame = await ReadExactFrameAsync();
         if (frame.Method != 1)
         {
@@ -256,7 +252,7 @@ public sealed class GatewaySession
         SendPack(new SessionKeyOkPacket());
         Stage = "connect_server";
 
-        // 3. connect_server
+        // connect_server
         frame = await ReadExactFrameAsync();
         if (frame.Method != 2)
         {
@@ -281,7 +277,7 @@ public sealed class GatewaySession
         SendPack(new ConnectServerReplyPacket(ConnectServerReply.Types.ReplyType.Connected));
         SendPack(new ClientAccountPacket(AccountEntityId));
         Stage = "account_login";
-        Log.Information("Gateway {ConnectionId} RSA/ARC4/zlib 握手完成，已下发 ClientAccount", ConnectionId);
+        _logger.Information("Gateway 连接 {ConnectionId} 握手完成", ConnectionId);
     }
 
     private async Task<GatewayFrame> ReadExactFrameAsync()
@@ -291,7 +287,7 @@ public sealed class GatewaySession
         _decryptor?.ProcessBytes(prefix, 0, prefix.Length, prefix, 0);
 
         uint length = BinaryPrimitives.ReadUInt32LittleEndian(prefix);
-        if (length < 2 || length > Options.GatewayMaxFrameBytes)
+        if (length < 2 || length > Config.Server.GatewayMaxFrameBytes)
         {
             throw new InvalidDataException("RPC 帧长度越界");
         }
@@ -325,7 +321,7 @@ public sealed class GatewaySession
             {
                 int count = _inflater.Inflate(_inflateBuffer);
                 expanded += count;
-                if (expanded > Options.GatewayMaxFrameBytes * 4)
+                if (expanded > Config.Server.GatewayMaxFrameBytes * 4)
                 {
                     throw new InvalidDataException("压缩流展开量超过限制");
                 }
@@ -360,7 +356,7 @@ public sealed class GatewaySession
                 if (_headerCount < 4) continue;
 
                 uint length = BinaryPrimitives.ReadUInt32LittleEndian(_header);
-                if (length < 2 || length > Options.GatewayMaxFrameBytes)
+                if (length < 2 || length > Config.Server.GatewayMaxFrameBytes)
                 {
                     throw new InvalidDataException("RPC 帧长度越界");
                 }
