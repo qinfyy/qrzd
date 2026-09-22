@@ -1,5 +1,3 @@
-"""读取已有解包结果，恢复 DBX 逻辑名并转换为可读 JSON。"""
-
 from __future__ import annotations
 
 import hashlib

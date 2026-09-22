@@ -34,8 +34,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="proto/gateway.proto" GrpcServices="None" />
-    <Protobuf Include="Database\ServerProto.proto" GrpcServices="None" />
+    <Protobuf Include="proto/common.proto" GrpcServices="None" />
+    <Protobuf Include="proto/client_gate.proto" GrpcServices="None" />
+    <Protobuf Include="Database\ServerProto.proto" />
     <Content Remove="data/**;logs/**" />
   </ItemGroup>
 

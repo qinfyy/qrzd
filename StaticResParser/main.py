@@ -1,5 +1,3 @@
-"""QRZD 静态策划表导出入口：已解包的 input -> 逻辑资源名 JSON output。"""
-
 from __future__ import annotations
 
 import argparse
@@ -37,7 +35,46 @@ def source_roots(input_path: Path, overlays: list[Path]) -> list[Path]:
     return result
 
 
-def discover(roots: list[Path]):
+def to_relative_path(path: Path | str | None, base_input: Path, overlays: list[Path] | None = None) -> str | None:
+    """将绝对路径转换为以 args.input 或 overlay 起始的相对路径表示。"""
+    if path is None:
+        return None
+    p = Path(path).resolve()
+    base_resolved = base_input.resolve()
+
+    if base_input.is_absolute():
+        try:
+            base_display = base_input.resolve().relative_to(Path.cwd().resolve())
+        except ValueError:
+            base_display = Path(base_input.name)
+    else:
+        base_display = base_input
+
+    if p.is_relative_to(base_resolved):
+        rel = p.relative_to(base_resolved)
+        return str(base_display if rel == Path('.') else base_display / rel)
+
+    if overlays:
+        for overlay in overlays:
+            overlay_resolved = overlay.resolve()
+            if p.is_relative_to(overlay_resolved):
+                if overlay.is_absolute():
+                    try:
+                        overlay_display = overlay_resolved.relative_to(Path.cwd().resolve())
+                    except ValueError:
+                        overlay_display = Path(overlay.name)
+                else:
+                    overlay_display = overlay
+                rel = p.relative_to(overlay_resolved)
+                return str(overlay_display if rel == Path('.') else overlay_display / rel)
+
+    try:
+        return str(p.relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return str(path)
+
+
+def discover(roots: list[Path], base_input: Path = ROOT / 'input', overlays: list[Path] | None = None):
     candidates = []
     catalog_packages = set()
     skipped = []
@@ -68,7 +105,7 @@ def discover(roots: list[Path]):
             seen.add(identity)
             groups.setdefault(package, []).append(parent)
         else:
-            skipped.append({'directory': str(parent), 'reason': '没有 DBX 表名清单，无法可靠恢复逻辑名，未导出'})
+            skipped.append({'directory': to_relative_path(parent, base_input, overlays), 'reason': '没有 DBX 表名清单，无法可靠恢复逻辑名，未导出'})
     if not groups:
         raise ValueError('未找到 dbx_md5.json 或 4b1354f6.*。请把 NPK 解包结果放入 input，而不是 NPK 文件本身')
     if len({name.casefold() for name in groups}) != len(groups):
@@ -136,7 +173,7 @@ def write_json(output: Path, relative: str, value, replace: bool = False) -> dic
     return {'output': relative, 'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}
 
 
-def export(packages: list[DbxPackage], output: Path, detailed: bool, skipped: list[dict]) -> dict:
+def export(packages: list[DbxPackage], output: Path, detailed: bool, skipped: list[dict], base_input: Path = ROOT / 'input', overlays: list[Path] | None = None) -> dict:
     manifest = {'producer': PRODUCER, 'files': [], 'tables': []}
     report = {'producer': PRODUCER, 'completed': False, 'packages': [], 'table_count': 0, 'exported_tables': 0, 'row_count': 0,
               'empty_tables': 0, 'failed_tables': 0, 'skipped': skipped}
@@ -144,8 +181,10 @@ def export(packages: list[DbxPackage], output: Path, detailed: bool, skipped: li
         for package in packages:
             print(f'[资源包] {package.name}：{len(package.catalog)} 张表，{len(package.directories)} 个覆盖层', flush=True)
             manifest['files'].append(write_json(output, f'{package.name}/dbx_md5.json', package.catalog))
-            report['packages'].append({'name': package.name, 'layers': [str(path) for path in package.directories],
-                                       'catalog': str(package.catalog_path), 'table_count': len(package.catalog),
+            report['packages'].append({'name': package.name,
+                                       'layers': [to_relative_path(path, base_input, overlays) for path in package.directories],
+                                       'catalog': to_relative_path(package.catalog_path, base_input, overlays),
+                                       'table_count': len(package.catalog),
                                        'unknown_entry_ids': package.unknown_entries()})
             for index, table in enumerate(sorted(package.catalog), 1):
                 item = {'resource': f'{package.name}/{table}.dbx', 'md5': package.catalog[table], 'status': 'failed'}
@@ -155,7 +194,7 @@ def export(packages: list[DbxPackage], output: Path, detailed: bool, skipped: li
                     record = write_json(output, f'{package.name}/{table}.json', value)
                     manifest['files'].append(record)
                     item.update(status='ok', output=record['output'], rows=len(value['rows']),
-                                sources={f'{table}.{suffix}': str(path) if path else None for suffix, path in files.items()})
+                                sources={f'{table}.{suffix}': to_relative_path(path, base_input, overlays) if path else None for suffix, path in files.items()})
                     report['exported_tables'] += 1
                     report['row_count'] += len(value['rows'])
                     report['empty_tables'] += not value['rows']
@@ -177,7 +216,7 @@ def export(packages: list[DbxPackage], output: Path, detailed: bool, skipped: li
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description='恢复 NeoX 已解包 DBX 的逻辑资源名并导出 JSON 策划表')
+    parser = argparse.ArgumentParser(description='恢复 NeoX 已解包 DBX 的逻辑资源名并导出 JSON')
     parser.add_argument('--input', type=Path, default=ROOT / 'input', help='已解包资源目录，默认程序所在目录的 input')
     parser.add_argument('--output', type=Path, default=ROOT / 'output', help='JSON 输出目录，默认程序所在目录的 output')
     parser.add_argument('--overlay', type=Path, action='append', default=[], help='额外覆盖层，可重复，后指定的优先')
@@ -188,11 +227,11 @@ def main(argv=None) -> int:
         output = args.output.absolute()
         for root in roots:
             print(f'[输入层] {root}', flush=True)
-        packages, skipped = discover(roots)
+        packages, skipped = discover(roots, base_input=args.input, overlays=args.overlay)
         prepare_output(output, [args.input.resolve(), *roots])
         for item in skipped:
             print(f'[跳过] {item["directory"]}：{item["reason"]}', flush=True)
-        report = export(packages, output, args.detailed_log, skipped)
+        report = export(packages, output, args.detailed_log, skipped, base_input=args.input, overlays=args.overlay)
     except (OSError, ValueError, TypeError, KeyError) as error:
         print(f'[失败] {error}', file=sys.stderr)
         return 1

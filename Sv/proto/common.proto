@@ -1,0 +1,84 @@
+syntax = "proto2";
+
+package mobile.server;
+
+message Void {
+}
+
+message ConnectServerRequest {
+    enum RequestType {
+        NEW_CONNECTION = 0;
+        RE_CONNECTION = 1;
+        BIND_AVATAR = 2;
+    }
+
+    optional bytes routes = 1;
+    required RequestType type = 2;
+    optional bytes deviceid = 3;
+    optional bytes entityid = 4;
+    optional bytes authmsg = 5;
+    optional uint32 received_seq = 6;
+}
+
+message ConnectServerReply {
+    enum ReplyType {
+        BUSY = 0;
+        CONNECTED = 1;
+        RECONNECT_SUCCEEDED = 2;
+        RECONNECT_FAILED = 3;
+        FORBIDDEN = 4;
+        MAX_CONNECTION = 5;
+    }
+
+    optional bytes routes = 1;
+    required ReplyType type = 2 [default = BUSY];
+    optional bytes entityid = 3;
+    optional uint32 received_seq = 4;
+}
+
+message Md5OrIndex {
+    optional bytes md5 = 1;
+    optional sint32 index = 2 [default = -1];
+    optional uint32 seq = 3;
+}
+
+message EntityMessage {
+    optional bytes routes = 1;
+    required bytes id = 2;
+    required Md5OrIndex method = 3;
+    optional bytes parameters = 4;
+    optional uint32 seq = 5;
+}
+
+message BroadcastMessage {
+    required int32 filter_index = 1;
+    required bytes parameters = 2;
+    required Md5OrIndex method = 3;
+    optional uint32 seq = 4;
+}
+
+message EntityInfo {
+    optional bytes routes = 1;
+    optional Md5OrIndex type = 2;
+    optional bytes id = 3;
+    optional bytes info = 4;
+    optional uint32 seq = 5;
+}
+
+message OutBandInfo {
+    optional bytes routes = 1;
+    required bytes message = 2;
+    optional uint32 seq = 3;
+}
+
+message ServerInfo {
+    required bytes ip = 1;
+    required int32 port = 2;
+    optional int32 sid = 3;
+    optional bool banclient = 4;
+}
+
+message EntityMailbox {
+    required bytes entityid = 1;
+    optional ServerInfo serverinfo = 2;
+}

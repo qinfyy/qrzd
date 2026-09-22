@@ -1,0 +1,40 @@
+syntax = "proto2";
+
+package mobile.server;
+
+import "proto/common.proto";
+
+message EncryptString {
+    required bytes encryptstr = 1;
+}
+
+message SessionSeed {
+    required int64 seed = 1;
+}
+
+message SessionKey {
+    required bytes random_padding_header = 1;
+    required bytes session_key = 2;
+    required int64 seed = 3;
+    required bytes random_padding_tail = 4;
+}
+
+service IGateService {
+    rpc seed_request(Void) returns (Void);
+    rpc session_key(EncryptString) returns (Void);
+    rpc connect_server(ConnectServerRequest) returns (Void);
+    rpc entity_message(EntityMessage) returns (Void);
+    rpc reg_md5_index(Md5OrIndex) returns (Void);
+}
+
+service IGateClient {
+    rpc seed_reply(SessionSeed) returns (Void);
+    rpc session_key_ok(Void) returns (Void);
+    rpc connect_reply(ConnectServerReply) returns (Void);
+    rpc create_entity(EntityInfo) returns (Void);
+    rpc destroy_entity(EntityInfo) returns (Void);
+    rpc entity_message(EntityMessage) returns (Void);
+    rpc chat_to_client(OutBandInfo) returns (Void);
+    rpc reg_md5_index(Md5OrIndex) returns (Void);
+    rpc broadcast_message(BroadcastMessage) returns (Void);
+}
