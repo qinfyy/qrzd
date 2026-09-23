@@ -30,6 +30,7 @@ public sealed class Player
         Inventory = Add(new InventoryLogic(this));
         HeroMgr = Add(new HeroMgrLogic(this));
         Social = Add(new SocialLogic(this));
+        Chat = Add(new ChatLogic(this));
         Intelligence = Add(new IntelligenceLogic(this));
     }
 
@@ -51,6 +52,8 @@ public sealed class Player
 
     public SocialLogic Social { get; }
 
+    public ChatLogic Chat { get; }
+
     public IntelligenceLogic Intelligence { get; }
 
     public bool IsDirty { get; private set; }
@@ -65,7 +68,10 @@ public sealed class Player
         string avatarId = ObjectId.GenerateNewId().ToString();
         InitialPlayerTemplate.ApplyTo(saveData, uid, nickName, serverId, avatarId);
         Player player = new(uid, saveData);
-        player.OnCreate();
+        lock (player.SyncRoot)
+        {
+            player.OnCreate();
+        }
         return player;
     }
 
@@ -139,6 +145,8 @@ public sealed class Player
             ["hn"] = options.HostId,
             ["role"] = Profile.RoleId,
             ["level"] = Profile.Level,
+            ["money"] = Profile.Money,
+            ["crystal"] = Profile.Crystal,
             ["weeknum"] = new Dictionary<string, object>
             {
                 ["w"] = WeekNum.Week,
@@ -152,20 +160,39 @@ public sealed class Player
                 ["dv"] = City.DevelopVal,
                 ["dvc"] = City.DevelopValCount,
                 ["av"] = City.ActionVal,
+                ["pv"] = 240,
+                ["lpc"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 ["bf"] = City.BuildFund,
-                ["fv"] = City.FatigueVal,
+                ["fv"] = City.ForceVal,
                 ["ev"] = City.EventVal,
                 ["rv"] = City.ResearchVal,
-                ["areas"] = new Dictionary<string, object>(),
+                ["areas"] = City.ToAreasSnapshot(),
+                ["hb"] = Array.Empty<object>(),
+                ["nbb"] = true,
+                ["dbd"] = new Dictionary<string, object>(),
+                ["pn"] = City.PatrolNum,
+                ["cc"] = 0,
+                ["tpn"] = 0,
+                ["tvn"] = 0,
+                ["tbn"] = 0,
+                ["uc"] = false,
+                ["ci"] = false,
+                ["rbn"] = 0,
+                ["coe"] = new Dictionary<string, object>(),
+                ["uda"] = false,
+                ["jpv"] = 0,
+                ["jpvt"] = 0,
+                ["mjpv"] = 0,
+                ["cjsla"] = 0,
             },
             ["inv"] = new Dictionary<string, object>
             {
                 ["mc"] = Inventory.MaxCost,
-                ["items"] = Array.Empty<object>(),
+                ["items"] = Inventory.ToSnapshot(),
             },
             ["heromgr"] = new Dictionary<string, object>
             {
-                ["hrs"] = Array.Empty<object>(),
+                ["hrs"] = HeroMgr.ToSnapshot(),
                 ["cfs"] = new Dictionary<string, object>(),
             },
             ["sd"] = new Dictionary<string, object>

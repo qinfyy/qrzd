@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Collections.Frozen;
+using System.Diagnostics.CodeAnalysis;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using Serilog;
@@ -10,7 +12,8 @@ using Mobile.Server;
 namespace Sv.Gateway;
 
 /// <summary>
-/// 最SB的协议
+/// Gateway 协议路由器。
+/// 持有全量编译期硬编码的 RPC 方法名与 MD5 散列双向索引，负责将实体报文快速路由至对应的业务处理器。
 /// </summary>
 public sealed class GatewayRouter
 {
@@ -18,20 +21,59 @@ public sealed class GatewayRouter
 
     private static readonly ILogger Logger = Log.ForContext<GatewayRouter>();
 
-    private static readonly string[] MethodNames =
-    [
-        "login", "loginWithUrs", "heartbeatServer", "syncServerTime",
-        "uploadDeviceInfo", "logCheckCheat", "uploadTouchHistory", "uploadLocation",
-        "reliableRpcCall", "pullEvents", "syncAllIntelligenceRequest", "logout",
-    ];
+    private static readonly FrozenDictionary<string, string> HashToName;
+    private static readonly FrozenDictionary<string, string> NameToHash;
 
-    private static readonly Dictionary<string, string> Methods = MethodNames.ToDictionary(AeadTool.HashMethodNameHex, StringComparer.Ordinal);
+    static GatewayRouter()
+    {
+        Dictionary<string, string> hashToName = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> nameToHash = new(StringComparer.Ordinal);
+
+        foreach (string name in RpcNames.All)
+        {
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            string trimmed = name.Trim();
+            string hash = AeadTool.HashMethodNameHex(trimmed);
+            nameToHash.TryAdd(trimmed, hash);
+            hashToName.TryAdd(hash, trimmed);
+        }
+
+        HashToName = hashToName.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+        NameToHash = nameToHash.ToFrozenDictionary(StringComparer.Ordinal);
+
+        Logger.Information("Gateway RPC 路由表初始化完成，共索引 {RpcCount} 个 RPC 方法", HashToName.Count);
+    }
 
     private readonly LoginHandlers _loginHandlers = new();
     private readonly PlayerHandlers _playerHandlers = new();
 
-    public static string GetMethodName(string digest) =>
-        Methods.TryGetValue(digest, out string? name) ? name : $"Unknown method ({digest})";
+    public static int RpcCount => HashToName.Count;
+
+    public static string GetRpcName(string hash)
+    {
+        if (string.IsNullOrEmpty(hash))
+        {
+            return "Unknown";
+        }
+
+        return HashToName.TryGetValue(hash, out string? name) ? name : "Unknown";
+    }
+
+    public static string GetMethodName(string digest) => GetRpcName(digest);
+
+    public static string GetRpcHash(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return string.Empty;
+        }
+
+        return NameToHash.TryGetValue(name, out string? hash) ? hash : AeadTool.HashMethodNameHex(name);
+    }
+
+    public static bool TryGetRpcName(string hash, [NotNullWhen(true)] out string? name) => HashToName.TryGetValue(hash, out name);
+
+    public static bool TryGetRpcHash(string name, [NotNullWhen(true)] out string? hash) => NameToHash.TryGetValue(name, out hash);
 
     public void Route(GatewaySession session, EntityMessage message)
     {
@@ -41,25 +83,25 @@ public sealed class GatewayRouter
             throw new InvalidDataException("实体归属或方法标识无效");
         }
 
-        string digest = Convert.ToHexString(message.Method.Md5.Span);
-        string? method = Methods.GetValueOrDefault(digest);
-        if (method is null)
-        {
-            Logger.Warning("未实现 Gateway RPC 方法 {MethodHash}，连接 {ConnectionId}，参数长度 {PayloadLength}", digest, session.ConnectionId, message.Parameters.Length);
-            return;
-        }
+        string rpcHash = Convert.ToHexString(message.Method.Md5.Span);
+        string rpcName = GetRpcName(rpcHash);
+        int length = message.Parameters.Length;
+        string state = session.Stage;
 
-        bool canRunBeforeLogin = method is "login" or "loginWithUrs";
+        Logger.Information("收到 Gateway RPC，连接 {ConnectionId}，RPC Name {CommandID}，RPC Hash {CommandName} ，参数长度 {Length}，状态 {State}",
+            session.ConnectionId, rpcName, rpcHash, length, state);
+
+        bool canRunBeforeLogin = rpcName is "login" or "loginWithUrs";
         if (!canRunBeforeLogin && session.Player is null)
         {
-            Logger.Warning("未认证连接请求玩家方法，连接 {ConnectionId}，方法 {Method}", session.ConnectionId, method);
+            Logger.Warning("未认证连接请求玩家方法，连接 {ConnectionId}，方法 {Method}", session.ConnectionId, rpcName);
             session.Close();
             return;
         }
 
         BsonDocument args = ReadArguments(message);
 
-        switch (method)
+        switch (rpcName)
         {
             case "login":
                 LoginRequestPacket? req = LoginRequestPacket.FromBson(args);
@@ -99,12 +141,48 @@ public sealed class GatewayRouter
                 }
                 break;
 
+            case "getAllAreaInfoRequest":
+                _playerHandlers.OnGetAllAreaInfoRequest(session, args);
+                break;
+
+            case "getAreaInfoRequest":
+                _playerHandlers.OnGetAreaInfoRequest(session, args);
+                break;
+
+            case "playerDestroyBuilding":
+                _playerHandlers.OnPlayerDestroyBuilding(session, args);
+                break;
+
+            case "teamOnLoginAsk":
+                _playerHandlers.OnTeamOnLoginAsk(session, args);
+                break;
+
+            case "limitTeamOnLoginAsk":
+                _playerHandlers.OnLimitTeamOnLoginAsk(session, args);
+                break;
+
+            case "multiTeamOnLoginAsk":
+                _playerHandlers.OnMultiTeamOnLoginAsk(session, args);
+                break;
+
+            case "enterPlace":
+                _playerHandlers.OnEnterPlace(session, args);
+                break;
+
+            case "tutorialBegin":
+                _playerHandlers.OnTutorialBegin(session, args);
+                break;
+
+            case "updateStoryClickFlag":
+                _playerHandlers.OnUpdateStoryClickFlag(session, args);
+                break;
+
             case "logout":
                 _playerHandlers.OnLogout(session, args);
                 break;
 
             default:
-                Logger.Debug("Gateway {ConnectionId} 暂未专门处理 {Method}", session.ConnectionId, method);
+                Logger.Warning("Gateway {ConnectionId} 暂未专门处理 RPC 方法 {Method} 哈希 {MethodHash}", session.ConnectionId, rpcName, rpcHash);
                 break;
         }
     }

@@ -59,6 +59,7 @@ public static class ResourcesLoader
 
         // 阶段 1：顺序反序列化并触发各行 OnLoad
         LoadTable<HeroData>(HeroData.TableFileName);
+        LoadTable<HeroStarSkillData>(HeroStarSkillData.TableFileName);
         LoadTable<ItemData>(ItemData.TableFileName);
         LoadTable<CityData>(CityData.TableFileName);
         LoadTable<CityBuildingData>(CityBuildingData.TableFileName);

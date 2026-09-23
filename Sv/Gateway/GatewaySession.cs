@@ -124,6 +124,55 @@ public sealed class GatewaySession
             throw new InvalidDataException("发送帧过大");
         }
 
+        string rpcName;
+        string rpcHash;
+        int length;
+
+        if (message is EntityMessage em)
+        {
+            rpcHash = Convert.ToHexString(em.Method.Md5.Span);
+            rpcName = GatewayRouter.GetRpcName(rpcHash);
+            length = em.Parameters.Length;
+        }
+        else if (message is EntityInfo ei)
+        {
+            rpcHash = Convert.ToHexString(ei.Type.Md5.Span);
+            rpcName = GatewayRouter.GetRpcName(rpcHash);
+            length = ei.Info.Length;
+        }
+        else if (packet is SessionSeedReplyPacket)
+        {
+            rpcName = "seed_reply";
+            rpcHash = GatewayRouter.GetRpcHash(rpcName);
+            length = payload.Length;
+        }
+        else if (packet is SessionKeyOkPacket)
+        {
+            rpcName = "session_key_ok";
+            rpcHash = GatewayRouter.GetRpcHash(rpcName);
+            length = payload.Length;
+        }
+        else if (packet is ConnectServerReplyPacket)
+        {
+            rpcName = "connect_server_reply";
+            rpcHash = GatewayRouter.GetRpcHash(rpcName);
+            length = payload.Length;
+        }
+        else
+        {
+            rpcName = packet.GetType().Name;
+            rpcHash = GatewayRouter.GetRpcHash(rpcName);
+            length = payload.Length;
+        }
+
+        if (string.IsNullOrEmpty(rpcName))
+        {
+            rpcName = "Unknown";
+        }
+
+        _logger.Information("发送 Gateway RPC，连接 {ConnectionId}，RPC Name {CommandID}，RPC Hash {CommandName} ，参数长度 {Length}，状态 {State}",
+            ConnectionId, rpcName, rpcHash, length, Stage);
+
         byte[] frame = new byte[payload.Length + 6];
         BinaryPrimitives.WriteUInt32LittleEndian(frame, (uint)(payload.Length + 2));
         BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(4), packet.Method);
@@ -180,6 +229,12 @@ public sealed class GatewaySession
                     {
                         throw new InvalidDataException("实体方法索引注册无效");
                     }
+
+                    string regHash = Convert.ToHexString(registration.Md5.Span);
+                    string regName = GatewayRouter.GetRpcName(regHash);
+                    if (regName == "Unknown") regName = "register_method";
+                    _logger.Information("收到 Gateway RPC，连接 {ConnectionId}，RPC Name {CommandID}，RPC Hash {CommandName} ，参数长度 {Length}，状态 {State}",
+                        ConnectionId, regName, regHash, frame.Payload.Length, Stage);
                     continue;
                 }
 
@@ -211,6 +266,10 @@ public sealed class GatewaySession
             throw new InvalidDataException("首包必须是 seed_request");
         }
 
+        string seedReqHash = GatewayRouter.GetRpcHash("seed_request");
+        _logger.Information("收到 Gateway RPC，连接 {ConnectionId}，RPC Name {CommandID}，RPC Hash {CommandName} ，参数长度 {Length}，状态 {State}",
+            ConnectionId, "seed_request", seedReqHash, 0, Stage);
+
         long seed = BinaryPrimitives.ReadInt64LittleEndian(RandomNumberGenerator.GetBytes(8)) & long.MaxValue;
         SendPack(new SessionSeedReplyPacket(seed));
         Stage = "session_key";
@@ -221,6 +280,10 @@ public sealed class GatewaySession
         {
             throw new InvalidDataException("未收到 session_key");
         }
+
+        string sessionKeyHash = GatewayRouter.GetRpcHash("session_key");
+        _logger.Information("收到 Gateway RPC，连接 {ConnectionId}，RPC Name {CommandID}，RPC Hash {CommandName} ，参数长度 {Length}，状态 {State}",
+            ConnectionId, "session_key", sessionKeyHash, frame.Payload.Length, Stage);
 
         EncryptString encrypted = EncryptString.Parser.ParseFrom(frame.Payload);
         byte[] decrypted = AeadTool.DecryptRsaOaep(encrypted.Encryptstr.ToByteArray());
@@ -258,6 +321,10 @@ public sealed class GatewaySession
         {
             throw new InvalidDataException("未收到 connect_server");
         }
+
+        string connReqHash = GatewayRouter.GetRpcHash("connect_server");
+        _logger.Information("收到 Gateway RPC，连接 {ConnectionId}，RPC Name {CommandID}，RPC Hash {CommandName} ，参数长度 {Length}，状态 {State}",
+            ConnectionId, "connect_server", connReqHash, frame.Payload.Length, Stage);
 
         ConnectServerRequest request = ConnectServerRequest.Parser.ParseFrom(frame.Payload);
         if (!request.HasType || request.Deviceid.Length > 256)

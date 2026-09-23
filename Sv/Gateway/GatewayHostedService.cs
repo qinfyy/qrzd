@@ -24,6 +24,10 @@ public sealed class GatewayHostedService(ILogger<GatewayHostedService> logger) :
     public bool Listening => _listening;
     public int Connections => _sessions.Count;
 
+    public GameMaster.GameMasterService? GameMasterService { get; set; }
+
+    public GatewaySession[] OnlineSessions => _sessionsByUid.Values.ToArray();
+
     public override Task StartAsync(CancellationToken cancellationToken)
     {
         AeadTool.InitializeKeys(Config.Server.GatewayPrivateKeyPath);

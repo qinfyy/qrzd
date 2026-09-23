@@ -2,6 +2,7 @@ using Serilog;
 using Sv.Configuration;
 using Sv.Database;
 using Sv.Gateway;
+using Sv.GameMaster;
 using Sv.Http;
 using Sv.Resources;
 using Sv.Resources.Tables;
@@ -30,13 +31,20 @@ try
     // 初始化策划配置表资源
     ResourcesLoader.Initialize(Config.GameData);
 
+    GameMasterHandbookGenerator.Generate(contentRootPath);
+
+    // 预热 Gateway RPC 路由表
+    _ = GatewayRouter.RpcCount;
+
     builder.Services.AddSingleton<GatewayHostedService>();
+    builder.Services.AddSingleton<GameMasterService>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayHostedService>());
 
     builder.WebHost.UseUrls($"http://0.0.0.0:{Config.Server.HttpPort}");
     builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 16 * 1024);
 
     WebApplication app = builder.Build();
+    _ = app.Services.GetRequiredService<GameMasterService>();
     app.UseSerilogRequestLogging();
     app.Use(async (context, next) =>
     {
@@ -46,6 +54,7 @@ try
 
     app.MapGet("/", () => Results.Text("Hello World", "text/plain; charset=utf-8"));
     app.MapDispatchEndpoints();
+    app.MapGameMasterEndpoints();
     app.MapFallback(() => Results.Text($"404 not found", "text/plain; charset=utf-8", statusCode: StatusCodes.Status404NotFound));
 
     Log.Information("区服 {ServerId} -> {Host}:{GatewayPort}", Config.Server.ServerId, Config.Server.AdvertiseHost, Config.Server.GatewayPort);

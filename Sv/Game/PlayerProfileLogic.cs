@@ -72,4 +72,26 @@ public sealed class PlayerProfileLogic(Player player) : PlayerLogicBase(player)
     }
 
     public long CreateTime => Comp.CreateTime;
+
+    public int Money
+    {
+        get => Comp.Money;
+        set
+        {
+            if (Comp.Money == value) return;
+            Comp.Money = value;
+            MarkDirty();
+        }
+    }
+
+    public int Crystal
+    {
+        get => Comp.Crystal;
+        set
+        {
+            if (Comp.Crystal == value) return;
+            Comp.Crystal = value;
+            MarkDirty();
+        }
+    }
 }

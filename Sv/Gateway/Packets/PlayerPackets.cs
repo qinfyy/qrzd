@@ -79,6 +79,18 @@ public sealed class PullEventsReplyPacket(ByteString avatarEntityId, int cbid = 
     }
 }
 
+public sealed class HeroStarOrderReplyPacket(ByteString avatarEntityId, int heroId) : BasePacket
+{
+    public override ushort Method => 5;
+
+    public override IMessage CreateMessage() => new EntityMessage
+    {
+        Id = avatarEntityId,
+        Method = AeadTool.EncodeMethodName("incHeroStarOrder"),
+        Parameters = ByteString.CopyFrom(new BsonDocument { ["h"] = heroId, ["artifact"] = false }.ToBson()),
+    };
+}
+
 public sealed class ReliableRpcAckPacket(ByteString avatarEntityId, int rpcSeq) : BasePacket
 {
     public override ushort Method => 5;
@@ -116,6 +128,23 @@ public sealed class PullEventsRequestPacket
 
     public static PullEventsRequestPacket FromBson(BsonDocument args) =>
         new() { Cbid = args.GetValue("_cbid_", 0).AsInt32 };
+}
+
+public sealed class HeroStarOrderRequestPacket
+{
+    public int HeroId { get; init; }
+
+    public static HeroStarOrderRequestPacket? FromBson(BsonDocument args)
+    {
+        if (!args.TryGetValue("h", out BsonValue? heroId) || !heroId.IsInt32 ||
+            !args.TryGetValue("cost", out BsonValue? cost) || !cost.IsBsonArray || cost.AsBsonArray.Count != 0 ||
+            !args.TryGetValue("fkt", out BsonValue? fakeTreasure) || !fakeTreasure.IsInt32 || fakeTreasure.AsInt32 != 0)
+        {
+            return null;
+        }
+
+        return new HeroStarOrderRequestPacket { HeroId = heroId.AsInt32 };
+    }
 }
 
 public sealed class ReliableRpcRequestPacket

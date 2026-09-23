@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Text.Json;
 
 namespace Sv.Resources.Tables;
 
@@ -102,4 +103,32 @@ public sealed class HeroData : TableBase
             throw new InvalidDataException($"神器使 ID 非法: {ProtoId}");
         }
     }
+}
+
+public sealed class HeroStarSkillData : TableBase
+{
+    public const string TableFileName = "hero_star_skill.json";
+
+    public int HeroId { get; private set; }
+    public int StarLevel { get; private set; }
+    public int StarOrder { get; private set; }
+
+    [JsonPropertyName("cumInsightValue")]
+    public int InsightBonus { get; set; }
+
+    [JsonPropertyName("cumConstructValue")]
+    public int ConstructBonus { get; set; }
+
+    [JsonPropertyName("cumLeadershipValue")]
+    public int LeadershipBonus { get; set; }
+
+    public override void SetKey(JsonElement key)
+    {
+        JsonElement tuple = key.GetProperty("$tuple");
+        HeroId = tuple[0].GetInt32();
+        StarLevel = tuple[1].GetInt32();
+        StarOrder = tuple[2].GetInt32();
+    }
+
+    public override int GetId() => (HeroId * 100) + (StarLevel * 10) + StarOrder;
 }

@@ -10,6 +10,8 @@ message PlayerProfileComp {
     int32 role_id = 4;
     string avatar_id = 5;
     int32 server_id = 6;
+    int32 money = 7;
+    int32 crystal = 8;
 }
 
 // 周目与天数
@@ -32,15 +34,54 @@ message CityComp {
     int32 fatigue_val = 5;
     int32 event_val = 6;
     int32 research_val = 7;
+    int32 patrol_num = 8;
+    repeated AreaState areas = 9;
 }
+
+message AreaState {
+    int32 id = 1;
+    int32 status = 2;
+    bool cr = 3;
+    bool lock = 4;
+    int32 level = 5;
+    int32 max_building_num = 6;
+    int32 current_stage = 7;
+    repeated BuildingState buildings = 8;
+    int32 research_val = 9;
+    int32 force_val = 10;
+    int32 develop_val = 11;
+}
+
+message BuildingState {
+    int32 slot = 1;
+    int32 building_id = 2;
+    string uuid = 3;
+}
+
 
 // 背包与道具
 message InventoryComp {
     int32 max_cost = 1;
+    repeated ItemState items = 2;
+}
+
+message ItemState {
+    string uuid = 1;
+    int32 item_id = 2;
+    int32 count = 3;
 }
 
 // 神器使管理器
 message HeroMgrComp {
+    repeated HeroState heroes = 1;
+}
+
+message HeroState {
+    int32 hero_id = 1;
+    int32 star_level = 2;
+    int32 star_order = 3;
+    int32 fatigue = 4;
+    int32 friendly = 5;
 }
 
 // 社交数据
