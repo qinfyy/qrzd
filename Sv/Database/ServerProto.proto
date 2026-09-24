@@ -12,17 +12,32 @@ message PlayerProfileComp {
     int32 server_id = 6;
     int32 money = 7;
     int32 crystal = 8;
+    int32 experience = 9;
+    int32 summon_coin = 10;
 }
 
 // 周目与天数
 message WeekNumComp {
     int32 week = 1;
     int32 day = 2;
+    repeated DailySettlement settlements = 3;
+    int32 ending_id = 4;
+    bool chapter_pending = 5;
+    string score_json = 6;
+    string ending_reward_json = 7;
+}
+
+message DailySettlement {
+    int32 week = 1;
+    int32 day = 2;
+    bool acknowledged = 3;
+    string snapshot_json = 4;
 }
 
 // 玩家状态（主城、战斗等）
 message StatusComp {
     string current_status = 1;
+    bool emergency = 2;
 }
 
 // 城市与建设数值
@@ -36,6 +51,19 @@ message CityComp {
     int32 research_val = 7;
     int32 patrol_num = 8;
     repeated AreaState areas = 9;
+    int32 daily_consumed_action = 10;
+    int32 total_actions = 11;
+    int32 total_patrols = 12;
+    int32 total_builds = 13;
+    int32 total_develops = 14;
+    int32 patrol_area = 15;
+    repeated int32 patrol_heroes = 16;
+    bool newbee_patrol_complete = 17;
+    bool ended_actions = 18;
+    map<int32, int32> blackcores = 19;
+    repeated int32 hidden_buildings = 20;
+    int32 center_confidence = 21;
+    repeated int32 passed_stages = 22;
 }
 
 message AreaState {
@@ -50,6 +78,9 @@ message AreaState {
     int32 research_val = 9;
     int32 force_val = 10;
     int32 develop_val = 11;
+    repeated int32 stage_ids = 12;
+    int32 patrol_count = 13;
+    bool patrol_lock = 14;
 }
 
 message BuildingState {
@@ -69,11 +100,14 @@ message ItemState {
     string uuid = 1;
     int32 item_id = 2;
     int32 count = 3;
+    string treasure_json = 4;
 }
 
 // 神器使管理器
 message HeroMgrComp {
     repeated HeroState heroes = 1;
+    map<int32, int32> banned_heroes = 2;
+    repeated int32 cine_locked_heroes = 3;
 }
 
 message HeroState {
@@ -86,11 +120,139 @@ message HeroState {
 
 // 社交数据
 message SocialComp {
+    repeated StoryMessage private_messages = 1;
+    repeated StoryMessage terminal_messages = 2;
+}
+
+message StoryMessage {
+    int32 id = 1;
+    bool read = 2;
+    int32 selected_option = 3;
+    bool complete = 4;
+    int64 received_at = 5;
 }
 
 // 情报数据
 message IntelligenceComp {
     bool readed = 1;
+    repeated IntelligenceState entries = 2;
+    int32 generated_day = 3;
+    int32 ended_day = 4;
+}
+
+message IntelligenceState {
+    int32 id = 1;
+    int32 state = 2;
+    int32 day = 3;
+    string uuid = 4;
+    bool opened = 5;
+    int32 handled_day = 6;
+    repeated IntelligenceEffect effects = 7;
+}
+
+message IntelligenceEffect {
+    int32 id = 1;
+    string uuid = 2;
+    int32 day = 3;
+    int32 area = 4;
+    int32 building = 5;
+    int32 hero = 6;
+    string reward_json = 7;
+}
+
+message StoryComp {
+    string route = 1;
+    repeated int32 cgs = 2;
+    repeated int32 endings = 3;
+    repeated int32 notepads = 4;
+    repeated string clicked_routes = 5;
+    int32 place = 6;
+    int32 general_value = 7;
+    bool client_event_finish = 8;
+    repeated int32 unlocked_buildings = 9;
+    map<int32, string> area_exclam_json = 10;
+    repeated int32 current_cgs = 11;
+}
+
+message EventTriggerComp {
+    repeated int32 completed_events = 1;
+    repeated EventProgress processing_events = 2;
+    repeated int32 queued_events = 3;
+    repeated int32 locked_events = 4;
+    repeated EventChoice choices = 5;
+    map<int32, int32> completion_actions = 6;
+    map<int32, int32> completion_days = 7;
+    string clicked_area = 8;
+    repeated int32 client_operations = 9;
+    repeated int32 battle_completions = 10;
+}
+
+message EventProgress {
+    int32 event_id = 1;
+    repeated int32 dialogs = 2;
+    repeated int32 battles = 3;
+    repeated string ui = 4;
+    int32 started_day = 5;
+}
+
+message EventChoice {
+    int32 event_id = 1;
+    int32 selected_event = 2;
+    int32 option = 3;
+    int32 day = 4;
+}
+
+message NewbeeComp {
+    repeated int32 finished = 1;
+    repeated int32 processing = 2;
+    bool init_prologue = 3;
+    bool tutorial_began = 4;
+    bool summon_claimed = 5;
+    bool summon_open = 6;
+    int32 summon_hero = 7;
+}
+
+message CombatComp {
+    CombatInstance active = 1;
+    repeated CombatInstance settled = 2;
+}
+
+message CombatInstance {
+    string id = 1;
+    int32 type = 2;
+    int32 stage = 3;
+    repeated int32 heroes = 4;
+    repeated int32 extra_heroes = 5;
+    int32 pending_hero = 6;
+    int32 week = 7;
+    int32 day = 8;
+    int64 entered_at = 9;
+    int32 state = 10;
+    int32 win = 11;
+    string reward_json = 12;
+    string entry_json = 13;
+    bool temporary_heroes = 14;
+    int32 event_id = 15;
+    int32 action_cost = 16;
+    int32 fatigue_cost = 17;
+    int32 area = 18;
+}
+
+message RpcComp {
+    int32 max_sequence = 1;
+    repeated RpcReceipt receipts = 2;
+}
+
+message RpcReceipt {
+    int32 sequence = 1;
+    string method = 2;
+    bytes request = 3;
+    repeated RpcReply replies = 4;
+}
+
+message RpcReply {
+    string method = 1;
+    bytes parameters = 2;
 }
 
 // 玩家持久化存档聚合根
@@ -103,4 +265,9 @@ message PlayerSaveData {
     HeroMgrComp hero_mgr_comp = 6;
     SocialComp social_comp = 7;
     IntelligenceComp intelligence_comp = 8;
+    StoryComp story_comp = 9;
+    EventTriggerComp event_trigger_comp = 10;
+    NewbeeComp newbee_comp = 11;
+    CombatComp combat_comp = 12;
+    RpcComp rpc_comp = 13;
 }

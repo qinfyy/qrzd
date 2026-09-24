@@ -6,565 +6,481 @@ namespace Sv.Game;
 
 public sealed class CityLogic(Player player) : PlayerLogicBase(player)
 {
+    public const int DailyAction = 24;
     private CityComp Comp => Player.SaveData.CityComp;
-
-    public int ActionVal
+    public int ActionVal { get => Comp.ActionVal; set { Comp.ActionVal = Math.Max(0, value); MarkDirty(); } }
+    public int DevelopVal { get => Comp.DevelopVal; set { Comp.DevelopVal = value; MarkDirty(); } }
+    public int DevelopValCount { get => Comp.DevelopValCount; set { Comp.DevelopValCount = value; MarkDirty(); } }
+    public int BuildFund { get => Comp.BuildFund; set { Comp.BuildFund = value; MarkDirty(); } }
+    public int ForceVal { get => Comp.FatigueVal; set { Comp.FatigueVal = value; MarkDirty(); } }
+    public int FatigueVal { get => ForceVal; set => ForceVal = value; }
+    public int EventVal { get => Comp.EventVal; set { Comp.EventVal = value; MarkDirty(); } }
+    public int ResearchVal { get => Comp.ResearchVal; set { Comp.ResearchVal = value; MarkDirty(); } }
+    public int PatrolNum { get => Comp.PatrolNum; set { Comp.PatrolNum = value; MarkDirty(); } }
+    public int TotalActions => Comp.TotalActions;
+    public int DailyConsumedAction => Comp.DailyConsumedAction;
+    public int PatrolArea => Comp.PatrolArea;
+    public int[] PatrolHeroes => Comp.PatrolHeroes.ToArray();
+    public int CenterConfidence => Comp.CenterConfidence;
+    public bool EndedActions => Comp.EndedActions;
+    public bool NewbeePatrolComplete => Comp.NewbeePatrolComplete;
+    public IReadOnlyList<int> PassedStages => Comp.PassedStages;
+    public AreaState? FindArea(int id) => Comp.Areas.FirstOrDefault(area => area.Id == id);
+    public Dictionary<int, int> AreaLevels() => Comp.Areas.ToDictionary(area => area.Id, area => area.Level);
+    public Dictionary<int, int[]> AreaBuildings() => Comp.Areas.ToDictionary(area => area.Id, area => area.Buildings.Select(value => value.BuildingId).ToArray());
+    public Dictionary<int, int> AreaStates() => Comp.Areas.ToDictionary(area => area.Id, area => area.Cr && area.Status != 0 ? area.Status + 2 : area.Status);
+    public Dictionary<int, int> Blackcores() => Comp.Blackcores.ToDictionary(pair => pair.Key, pair => pair.Value);
+    public Dictionary<int, int> BlackcoreCounts() => new()
     {
-        get => Comp.ActionVal;
-        set
-        {
-            if (Comp.ActionVal != value)
-            {
-                Comp.ActionVal = value;
-                MarkDirty();
-            }
-        }
-    }
+        [0] = Comp.Blackcores.Values.Count(value => value == 0), [1] = Comp.Blackcores.Values.Count(value => value == 1),
+        [2] = Comp.Blackcores.Values.Count(value => value == 2),
+    };
 
-    public int DevelopVal
-    {
-        get => Comp.DevelopVal;
-        set
-        {
-            if (Comp.DevelopVal != value)
-            {
-                Comp.DevelopVal = value;
-                MarkDirty();
-            }
-        }
-    }
-
-    public int DevelopValCount
-    {
-        get => Comp.DevelopValCount;
-        set
-        {
-            if (Comp.DevelopValCount != value)
-            {
-                Comp.DevelopValCount = value;
-                MarkDirty();
-            }
-        }
-    }
-
-    public int BuildFund
-    {
-        get => Comp.BuildFund;
-        set
-        {
-            if (Comp.BuildFund != value)
-            {
-                Comp.BuildFund = value;
-                MarkDirty();
-            }
-        }
-    }
-
-    public int ForceVal
-    {
-        get => Comp.FatigueVal;
-        set
-        {
-            if (Comp.FatigueVal != value)
-            {
-                Comp.FatigueVal = value;
-                MarkDirty();
-            }
-        }
-    }
-
-    public int FatigueVal
-    {
-        get => ForceVal;
-        set => ForceVal = value;
-    }
-
-    public int EventVal
-    {
-        get => Comp.EventVal;
-        set
-        {
-            if (Comp.EventVal != value)
-            {
-                Comp.EventVal = value;
-                MarkDirty();
-            }
-        }
-    }
-
-    public int ResearchVal
-    {
-        get => Comp.ResearchVal;
-        set
-        {
-            if (Comp.ResearchVal != value)
-            {
-                Comp.ResearchVal = value;
-                MarkDirty();
-            }
-        }
-    }
-
-    public int PatrolNum
-    {
-        get => Comp.PatrolNum <= 0 ? 1 : Comp.PatrolNum;
-        set
-        {
-            if (Comp.PatrolNum != value)
-            {
-                Comp.PatrolNum = value;
-                MarkDirty();
-            }
-        }
-    }
-
-    protected internal override void OnCreate()
-    {
-        EnsureDefaultAreas();
-    }
-
-    protected internal override void OnLoad()
-    {
-        EnsureDefaultAreas();
-        RecalculateStats();
-    }
+    protected internal override void OnCreate() => Reset();
 
     public void EnsureDefaultAreas()
     {
-        if (Comp.Areas.Count == 0)
-        {
-            // Area 1: 中央庭 (FREE)
-            AreaState a1 = new()
-            {
-                Id = 1,
-                Status = 0, // FREE
-                Cr = false,
-                Lock = false,
-                Level = 1,
-                MaxBuildingNum = 4,
-                CurrentStage = 0,
-                ResearchVal = 5,
-                ForceVal = 5,
-                DevelopVal = 5,
-            };
-            a1.Buildings.Add(new BuildingState { Slot = 1, BuildingId = 1, Uuid = Guid.NewGuid().ToString("N") });
-            Comp.Areas.Add(a1);
-
-            // Area 2: 高校学园 (FIGHT，初始关卡 1101)
-            Comp.Areas.Add(new AreaState
-            {
-                Id = 2,
-                Status = 1, // FIGHT
-                Cr = false,
-                Lock = false,
-                Level = 1,
-                MaxBuildingNum = 4,
-                CurrentStage = 1101,
-            });
-
-            // Area 3: 东方古街 (FALL)
-            Comp.Areas.Add(new AreaState
-            {
-                Id = 3,
-                Status = 2, // FALL
-                Cr = false,
-                Lock = true,
-                Level = 1,
-                MaxBuildingNum = 4,
-                CurrentStage = 2101,
-            });
-
-            // Area 4: 中央城区 (FALL)
-            Comp.Areas.Add(new AreaState
-            {
-                Id = 4,
-                Status = 2, // FALL
-                Cr = false,
-                Lock = true,
-                Level = 1,
-                MaxBuildingNum = 4,
-                CurrentStage = 3101,
-            });
-
-            // Area 5: 研究所 (FALL)
-            Comp.Areas.Add(new AreaState
-            {
-                Id = 5,
-                Status = 2, // FALL
-                Cr = false,
-                Lock = true,
-                Level = 1,
-                MaxBuildingNum = 4,
-                CurrentStage = 4101,
-            });
-
-            // Area 6: 海湾侧城 (FALL)
-            Comp.Areas.Add(new AreaState
-            {
-                Id = 6,
-                Status = 2, // FALL
-                Cr = false,
-                Lock = true,
-                Level = 1,
-                MaxBuildingNum = 4,
-                CurrentStage = 5101,
-            });
-
-            // Area 7: 旧城区 (FALL)
-            Comp.Areas.Add(new AreaState
-            {
-                Id = 7,
-                Status = 2, // FALL
-                Cr = false,
-                Lock = true,
-                Level = 1,
-                MaxBuildingNum = 4,
-                CurrentStage = 6101,
-            });
-
-            // Area 8: 港湾区 (FALL)
-            Comp.Areas.Add(new AreaState
-            {
-                Id = 8,
-                Status = 2, // FALL
-                Cr = false,
-                Lock = true,
-                Level = 1,
-                MaxBuildingNum = 4,
-                CurrentStage = 7101,
-            });
-
-            ActionVal = 24;
-            PatrolNum = 1;
-            ResearchVal = 5;
-            ForceVal = 5;
-            DevelopVal = 5;
-            MarkDirty();
-        }
-        else
-        {
-            if (ActionVal <= 0) ActionVal = 24;
-            if (PatrolNum <= 0) PatrolNum = 1;
-        }
+        if (Comp.Areas.Count == 0) throw new InvalidOperationException("城市存档尚未初始化，请使用新账号");
     }
 
-    public void RecalculateStats()
+    public void Reset()
     {
-        int totalRv = 0;
-        int totalFv = 0;
-        int totalDv = 0;
+        Comp.Areas.Clear();
+        Comp.Blackcores.Clear();
+        Comp.PassedStages.Clear();
+        Comp.HiddenBuildings.Clear();
+        Comp.PatrolHeroes.Clear();
+        Comp.ActionVal = DailyAction;
+        Comp.DailyConsumedAction = 0;
+        Comp.TotalActions = Comp.TotalPatrols = Comp.TotalBuilds = Comp.TotalDevelops = 0;
+        Comp.PatrolNum = 1;
+        Comp.PatrolArea = 0;
+        Comp.NewbeePatrolComplete = false;
+        Comp.EndedActions = false;
+        Comp.BuildFund = Comp.DevelopValCount = Comp.EventVal = Comp.CenterConfidence = 0;
+        foreach (CityData row in GameTableCatalog.Instance.GetAllData<CityData>().Where(row => row.Id is >= 1 and <= 8 && !row.IsVirtualArea).OrderBy(row => row.Id))
+        {
+            AreaState area = new() { Id = row.Id, Status = row.Id == 1 ? 0 : 2, Level = 1, MaxBuildingNum = SlotCount(row.Id, 1) };
+            area.StageIds.Add(PathForArea(row.Id));
+            area.CurrentStage = area.StageIds.FirstOrDefault();
+            if (row.Id == 1) area.Buildings.Add(new BuildingState { Slot = 1, BuildingId = 1, Uuid = Guid.NewGuid().ToString("N") });
+            Comp.Areas.Add(area);
+            Comp.Blackcores[row.Id] = 0;
+        }
+        RecalculateStats();
+        MarkDirty();
+    }
 
+    private static int SlotCount(int area, int level) => GameTableCatalog.Instance.GetAllData<CityDevelopmentData>()
+        .Count(row => row.CityId == area && row.LevelRequire <= level);
+
+    private bool EligibleMission(MissionData mission)
+    {
+        if (!mission.Flag("release") || mission.Int("system_type") != 1 || mission.Int("startweeknum") > Player.WeekNum.Week) return false;
+        if (mission.Int("cond_event") != 0 && !Player.EventTrigger.IsCompleted(mission.Int("cond_event"))) return false;
+        return !mission.Flag("leaveCurArea");
+    }
+
+    private int[] PathForArea(int area)
+    {
+        HashSet<int> stages = GameTableCatalog.Instance.GetAllData<FightFirstWeekData>().Select(row => row.Id).ToHashSet();
+        foreach (int eventId in Player.EventTrigger.Processing)
+            stages.UnionWith(GameTableCatalog.Instance.GetDataById<EventContentData>(eventId)!.Ints("contentFinishBattle"));
+        MissionData[] rows = GameTableCatalog.Instance.GetAllData<MissionData>().Where(row => row.Area == area && stages.Contains(row.Id) && EligibleMission(row)).ToArray();
+        MissionData? current = rows.Where(row => row.Prerequisites.Length == 0).OrderByDescending(row => row.Int("cond_event") != 0).ThenBy(row => row.Id).FirstOrDefault();
+        List<int> path = [];
+        while (current is not null && !path.Contains(current.Id))
+        {
+            path.Add(current.Id);
+            current = rows.Where(row => current.NextStages.Contains(row.Id) && row.Prerequisites.All(path.Contains))
+                .OrderByDescending(row => row.Int("cond_event") != 0).ThenBy(row => row.Id).FirstOrDefault();
+        }
+        return path.ToArray();
+    }
+
+    public void RefreshStages()
+    {
         foreach (AreaState area in Comp.Areas)
         {
-            int areaRv = 0;
-            int areaFv = 0;
-            int areaDv = 0;
-
-            foreach (BuildingState b in area.Buildings)
-            {
-                if (GameTableCatalog.Instance.TryGetDataById<CityBuildingData>(b.BuildingId, out CityBuildingData? row))
-                {
-                    areaRv += row.ResearchVal;
-                    areaFv += row.ForceVal;
-                    areaDv += row.DevVal;
-                }
-            }
-
-            area.ResearchVal = areaRv;
-            area.ForceVal = areaFv;
-            area.DevelopVal = areaDv;
-
-            if (area.Status == 0) // FREE
-            {
-                totalRv += areaRv;
-                totalFv += areaFv;
-                totalDv += areaDv;
-            }
+            int[] path = PathForArea(area.Id);
+            area.StageIds.Clear();
+            area.StageIds.Add(path);
+            if (area.Status != 0) area.CurrentStage = path.FirstOrDefault(id => !Comp.PassedStages.Contains(id));
         }
-
-        ResearchVal = Math.Max(5, totalRv);
-        ForceVal = Math.Max(5, totalFv);
-        DevelopVal = Math.Max(5, totalDv);
+        MarkDirty();
     }
 
-    public static Dictionary<string, object> GetAreaStageDict(int areaId, int currentStage, int status)
+    public Dictionary<string, object> ToStagesSnapshot(int areaId)
     {
-        if (status == 0) // FREE
-        {
-            return new Dictionary<string, object>
-            {
-                ["cs"] = 0,
-                ["sl"] = Array.Empty<object>()
-            };
-        }
-
-        int baseStage = areaId switch
-        {
-            2 => 1101,
-            3 => 2101,
-            4 => 3101,
-            5 => 4101,
-            6 => 5101,
-            7 => 6101,
-            8 => 7101,
-            _ => 1101,
-        };
-
-        int cs = currentStage > 0 ? currentStage : baseStage;
-        object[] stageList = new object[6];
-        for (int i = 0; i < 6; i++)
-        {
-            stageList[i] = new object[] { baseStage + i };
-        }
-
-        return new Dictionary<string, object>
-        {
-            ["cs"] = cs,
-            ["sl"] = stageList
-        };
+        AreaState? area = FindArea(areaId);
+        if (area is null) return new() { ["cs"] = 0, ["sl"] = Array.Empty<object>() };
+        return new() { ["cs"] = area.Status == 0 ? 0 : area.CurrentStage, ["sl"] = area.StageIds.Select(id => (object)new object[] { id }).ToArray() };
     }
 
     public Dictionary<string, object>? ToAreaSnapshot(int areaId)
     {
-        AreaState? area = Comp.Areas.FirstOrDefault(a => a.Id == areaId);
+        AreaState? area = FindArea(areaId);
         if (area is null) return null;
-
-        Dictionary<string, object> bdDict = new();
-        foreach (BuildingState b in area.Buildings)
+        return new()
         {
-            bdDict[b.Slot.ToString()] = new Dictionary<string, object>
+            ["id"] = area.Id, ["st"] = new object[] { area.Status, area.Cr, area.Lock }, ["lv"] = area.Level, ["mbn"] = area.MaxBuildingNum,
+            ["bd"] = area.Buildings.ToDictionary(building => building.Slot.ToString(), building => (object)new Dictionary<string, object>
             {
-                ["id"] = b.BuildingId,
-                ["uuid"] = b.Uuid,
-            };
-        }
-
-        return new Dictionary<string, object>
-        {
-            ["id"] = area.Id,
-            ["st"] = new object[] { area.Status, area.Cr, area.Lock },
-            ["lv"] = Math.Max(1, area.Level),
-            ["mbn"] = Math.Max(4, area.MaxBuildingNum),
-            ["bd"] = bdDict,
-            ["dbd"] = new Dictionary<string, object>(),
-            ["rv"] = area.ResearchVal,
-            ["fv"] = area.ForceVal,
-            ["dv"] = area.DevelopVal,
-            ["pl"] = false,
-            ["stage"] = GetAreaStageDict(area.Id, area.CurrentStage, area.Status)
+                ["id"] = building.BuildingId, ["uuid"] = building.Uuid,
+            }),
+            ["dbd"] = new Dictionary<string, object>(), ["rv"] = area.ResearchVal, ["fv"] = area.ForceVal, ["dv"] = area.DevelopVal,
+            ["pl"] = area.PatrolLock, ["stage"] = ToStagesSnapshot(areaId),
         };
     }
 
-    public Dictionary<string, object> ToAreasSnapshot()
+    public Dictionary<string, object> ToAreasSnapshot() => Comp.Areas.ToDictionary(area => $"area_{area.Id}", area => (object)ToAreaSnapshot(area.Id)!);
+
+    public Dictionary<string, object> ToCityDataSnapshot() => new()
     {
-        EnsureDefaultAreas();
-        Dictionary<string, object> result = new();
-        for (int i = 1; i <= 8; i++)
+        ["dv"] = DevelopVal, ["dvc"] = DevelopValCount, ["av"] = ActionVal, ["pv"] = 240, ["lpc"] = Player.Profile.CreateTime,
+        ["bf"] = BuildFund, ["fv"] = ForceVal, ["ev"] = EventVal, ["rv"] = ResearchVal, ["pn"] = PatrolNum, ["cc"] = CenterConfidence,
+        ["tpn"] = Comp.TotalPatrols, ["tvn"] = Comp.TotalDevelops, ["tbn"] = Comp.TotalBuilds, ["nbb"] = !Player.Newbee.IsFinished(40),
+        ["acr"] = Array.Empty<object>(), ["uc"] = false, ["rbn"] = 0, ["hb"] = Comp.HiddenBuildings.ToArray(), ["areas"] = ToAreasSnapshot(),
+    };
+
+    public void Synchronize(bool settlement = false) => Notify("get_all_area_info_reply", new()
+    {
+        ["ais"] = ToAreasSnapshot(), ["cd"] = ToCityDataSnapshot(), ["sm"] = settlement,
+    });
+
+    public void RecalculateStats()
+    {
+        Comp.FatigueVal = Comp.ResearchVal = Comp.DevelopVal = 0;
+        foreach (AreaState area in Comp.Areas)
         {
-            Dictionary<string, object>? areaSnap = ToAreaSnapshot(i);
-            if (areaSnap is not null)
+            area.ResearchVal = area.ForceVal = area.DevelopVal = 0;
+            foreach (BuildingState building in area.Buildings)
             {
-                result[$"area_{i}"] = areaSnap;
+                if (!GameTableCatalog.Instance.TryGetDataById<CityBuildingData>(building.BuildingId, out var row)) continue;
+                area.ResearchVal += row.ResearchVal;
+                area.ForceVal += row.ForceVal;
+                area.DevelopVal += row.DevVal;
             }
+            if (area.Status != 0) continue;
+            Comp.ResearchVal += area.ResearchVal;
+            Comp.FatigueVal += area.ForceVal;
+            Comp.DevelopVal += area.DevelopVal;
         }
-        return result;
+        MarkDirty();
     }
 
-    public Dictionary<string, object> ToCityDataSnapshot()
-    {
-        return new Dictionary<string, object>
-        {
-            ["dv"] = DevelopVal,
-            ["dvc"] = DevelopValCount,
-            ["av"] = ActionVal,
-            ["pv"] = 240,
-            ["lpc"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            ["bf"] = BuildFund,
-            ["fv"] = ForceVal,
-            ["ev"] = EventVal,
-            ["rv"] = ResearchVal,
-            ["pn"] = PatrolNum,
-            ["acr"] = Array.Empty<object>(),
-            ["uc"] = false,
-            ["rbn"] = 0
-        };
-    }
+    public bool CanAct(int cost) => cost >= 0 && ActionVal >= cost && Player.WeekNum.Week == 0 && Player.WeekNum.Day < 7 &&
+        Player.WeekNum.EndingId == 0 && !Player.Combat.IsActive && !Player.Status.Emergency && !Comp.EndedActions;
 
-    public bool Build(int areaId, int slot, int buildingId, int[] heroIds, out string? error)
+    private bool ValidateAreaTeam(int areaId, int cost, int fatigue, int[] heroes, out string? error)
     {
         error = null;
-        if (ActionVal < 2)
+        if (!CanAct(cost)) error = "当前状态不可行动或行动力不足";
+        else if (FindArea(areaId) is not { Status: 0, Lock: false }) error = "区域未解放或已锁定";
+        else if (!Player.HeroMgr.ValidateTeam(heroes, fatigue)) error = "队伍包含重复、未拥有或疲劳不足的神器使";
+        else if (!CanGrantActionRewards(cost)) error = "行动奖励配置缺失";
+        return error is null;
+    }
+
+    public bool CanGrantActionRewards(int cost)
+    {
+        for (int i = TotalActions + 1; i <= TotalActions + cost / 2; i++)
         {
-            error = "行动力不足";
-            return false;
+            if (GameTableCatalog.Instance.GetDataById<CityFirstWeekData>(i) is { } row && !RewardLogic.CanGrant(Player, row.Ints("reward"))) return false;
         }
+        return true;
+    }
 
-        AreaState? area = Comp.Areas.FirstOrDefault(a => a.Id == areaId);
-        if (area is null || area.Status != 0)
-        {
-            error = "区域未解放或不存在";
-            return false;
-        }
+    public void ConsumeAction(int cost)
+    {
+        if (cost < 0 || ActionVal < cost) throw new InvalidOperationException("行动力不足");
+        Comp.ActionVal -= cost;
+        Comp.DailyConsumedAction += cost;
+        Comp.TotalActions += cost / 2;
+        FinishPatrol();
+        MarkDirty();
+    }
 
-        if (slot < 1 || slot > Math.Max(4, area.MaxBuildingNum))
-        {
-            error = "建筑槽位无效";
-            return false;
-        }
-
-        if (area.Buildings.Any(b => b.Slot == slot))
-        {
-            error = "槽位已有建筑";
-            return false;
-        }
-
-        foreach (int heroId in heroIds)
-        {
-            if (!Player.HeroMgr.ConsumeFatigue(heroId, 5))
-            {
-                error = "神器使疲劳不足";
-                return false;
-            }
-        }
-
-        ActionVal -= 2;
-        area.Buildings.Add(new BuildingState
-        {
-            Slot = slot,
-            BuildingId = buildingId,
-            Uuid = Guid.NewGuid().ToString("N"),
-        });
-
+    public bool Build(int areaId, int slot, int buildingId, int[] heroes, out string? error)
+    {
+        error = null;
+        CityBuildingData? data = GameTableCatalog.Instance.GetDataById<CityBuildingData>(buildingId);
+        if (data is null || data.Ban != 0 || data.ClientBan != 0) { error = "该建筑不可建造"; return false; }
+        if (GameTableCatalog.Instance.GetDataById<CityWeekBuildingData>(Player.WeekNum.Week + 1) is { } allowed && !allowed.Ints("buildings").Contains(buildingId))
+        { error = "本周目尚未解锁该建筑"; return false; }
+        if (!ValidateAreaTeam(areaId, data.Ac, data.Fc, heroes, out error)) return false;
+        AreaState area = FindArea(areaId)!;
+        if (slot < 1 || slot > area.MaxBuildingNum || area.Buildings.Any(building => building.Slot == slot)) error = "建筑槽位无效或已占用";
+        else if (Player.Profile.Money < data.MoneyCost || ResearchVal < data.ResearchRequire) error = "金币或科技不足";
+        else if (heroes.Sum(Player.HeroMgr.GetConstructValue) < data.Cr) error = "建设力不足";
+        else if (data.MaxLimit > 0 && Comp.Areas.Sum(value => value.Buildings.Count(building => building.BuildingId == buildingId)) >= data.MaxLimit)
+            error = "建筑已达到全城数量上限";
+        else if (data.AreaLimit.Count > 0 && (!data.AreaLimit.TryGetValue(areaId, out int limit) ||
+            area.Buildings.Count(building => building.BuildingId == buildingId) >= limit)) error = "不符合建筑区域要求";
+        else if (data.Pre.Any(id => !Comp.Areas.Any(value => value.Buildings.Any(building => building.BuildingId == id)))) error = "缺少前置建筑";
+        else if (data.AreaBuildingRequire.Any(pair => area.Buildings.Count(building => building.BuildingId == pair.Key) < pair.Value)) error = "缺少本区域前置建筑";
+        else if (data.Init == 0 && !Comp.HiddenBuildings.Contains(buildingId)) error = "建筑尚未解锁";
+        if (error is not null) return false;
+        Player.HeroMgr.ConsumeTeamFatigue(heroes, data.Fc);
+        Player.Profile.AddMoney(-data.MoneyCost);
+        ConsumeAction(data.Ac);
+        area.Buildings.Add(new BuildingState { Slot = slot, BuildingId = buildingId, Uuid = Guid.NewGuid().ToString("N") });
+        Comp.TotalBuilds++;
         RecalculateStats();
+        var reward = RewardLogic.GrantAction(Player, GameTableCatalog.Instance.GetDataById<BuildRewardData>(Player.Profile.Level)!, data.Ac);
+        Synchronize();
+        Notify("area_build_reply", new() { ["rs"] = true, ["aid"] = areaId, ["ext"] = new Dictionary<string, object> { ["reward"] = reward } });
+        return true;
+    }
+
+    public bool LevelUpArea(int areaId, int levelUpVal, int[] heroes, out string? error)
+    {
+        error = null;
+        AreaState? area = FindArea(areaId);
+        CityUpgradeData? data = area is null ? null : GameTableCatalog.Instance.GetDataById<CityUpgradeData>(CityUpgradeData.MakeId(areaId, area.Level + 1));
+        if (levelUpVal != 1 || area is null || data is null) { error = "开发等级无效或已达上限"; return false; }
+        if (!ValidateAreaTeam(areaId, data.ActionConsume, data.Fatigue, heroes, out error)) return false;
+        if (heroes.Sum(Player.HeroMgr.GetLeadershipValue) < data.LeadRequire) error = "开发力不足";
+        else if (Player.Profile.Money < data.MoneyConsume) error = "金币不足";
+        if (error is not null) return false;
+        Player.HeroMgr.ConsumeTeamFatigue(heroes, data.Fatigue);
+        Player.Profile.AddMoney(-data.MoneyConsume);
+        ConsumeAction(data.ActionConsume);
+        area.Level++;
+        area.MaxBuildingNum = SlotCount(areaId, area.Level);
+        Comp.TotalDevelops++;
+        var reward = RewardLogic.GrantAction(Player, GameTableCatalog.Instance.GetDataById<DevelopRewardData>(Player.Profile.Level)!, data.ActionConsume);
+        Synchronize();
+        Notify("area_level_up_reply", new() { ["rs"] = true, ["aid"] = areaId, ["ext"] = new Dictionary<string, object> { ["reward"] = reward } });
         MarkDirty();
         return true;
     }
 
-    public bool LevelUpArea(int areaId, int levelUpVal, int[] heroIds, out string? error)
+    public bool Patrol(int areaId, int[] heroes, out string? error)
     {
         error = null;
-        if (ActionVal < 2)
+        AreaState? area = FindArea(areaId);
+        CityPatrolData? data = area is null ? null : GameTableCatalog.Instance.GetDataById<CityPatrolData>(CityPatrolData.MakeId(areaId, area.Level));
+        if (area is null || data is null || area.PatrolLock) { error = "区域不可巡查"; return false; }
+        if (!ValidateAreaTeam(areaId, data.ActionConsume, data.Fatigue, heroes, out error)) return false;
+        if (heroes.Sum(Player.HeroMgr.GetInsightValue) < data.InsightRequirement(PatrolNum) + Player.Intelligence.PatrolPenalty(areaId)) { error = "巡查力不足"; return false; }
+        Player.HeroMgr.ConsumeTeamFatigue(heroes, data.Fatigue);
+        ConsumeAction(data.ActionConsume);
+        Comp.PatrolArea = areaId;
+        Comp.PatrolHeroes.Add(heroes);
+        Comp.PatrolNum++;
+        Comp.TotalPatrols++;
+        area.PatrolCount++;
+        foreach (int hero in heroes) Player.HeroMgr.AddFriendly(hero, data.FavorReward);
+        Player.HeroMgr.Synchronize();
+        Player.EventTrigger.SetOperation(2, true);
+        var reward = RewardLogic.GrantAction(Player, GameTableCatalog.Instance.GetDataById<PatrolRewardData>(Player.Profile.Level)!, data.ActionConsume);
+        Synchronize();
+        Notify("notify_add_friendly", new() { ["fr"] = heroes.ToDictionary(id => id, _ => data.FavorReward), ["n"] = new Dictionary<string, object>() });
+        Notify("enter_patrol_reply", new()
         {
-            error = "行动力不足";
-            return false;
-        }
-
-        AreaState? area = Comp.Areas.FirstOrDefault(a => a.Id == areaId);
-        if (area is null || area.Status != 0)
-        {
-            error = "区域未解放或不存在";
-            return false;
-        }
-
-        if (area.Level + levelUpVal > 5)
-        {
-            error = "区域已达到最大等级";
-            return false;
-        }
-
-        foreach (int heroId in heroIds)
-        {
-            if (!Player.HeroMgr.ConsumeFatigue(heroId, 5))
-            {
-                error = "神器使疲劳不足";
-                return false;
-            }
-        }
-
-        ActionVal -= 2;
-        area.Level += levelUpVal;
-        area.MaxBuildingNum = Math.Min(8, 4 + (area.Level - 1));
-
+            ["s"] = true, ["rs"] = true, ["ext"] = new Dictionary<string, object> { ["reward"] = reward },
+            ["ev"] = Player.EventTrigger.Available().Where(row => row.Patrol).Select(row => row.Id).ToArray(),
+        });
         MarkDirty();
         return true;
     }
 
-    public bool Patrol(int areaId, int[] heroIds, out string? error)
+    public void FinishPatrol()
     {
-        error = null;
-        if (ActionVal < 2)
-        {
-            error = "行动力不足";
-            return false;
-        }
-
-        AreaState? area = Comp.Areas.FirstOrDefault(a => a.Id == areaId);
-        if (area is null)
-        {
-            error = "区域不存在";
-            return false;
-        }
-
-        foreach (int heroId in heroIds)
-        {
-            if (!Player.HeroMgr.ConsumeFatigue(heroId, 5))
-            {
-                error = "神器使疲劳不足";
-                return false;
-            }
-        }
-
-        ActionVal -= 2;
-        PatrolNum += 1;
-
-        foreach (int heroId in heroIds)
-        {
-            Player.HeroMgr.AddFriendly(heroId, 5);
-        }
-
+        Comp.PatrolArea = 0;
+        Comp.PatrolHeroes.Clear();
+        Player.EventTrigger.SetOperation(2, false);
         MarkDirty();
-        return true;
     }
 
     public bool DestroyBuilding(string uuid, out int affectedAreaId)
     {
         affectedAreaId = 0;
-        foreach (AreaState area in Comp.Areas)
+        if (!CanAct(0)) return false;
+        foreach (AreaState area in Comp.Areas.Where(area => area.Status == 0 && !area.Lock))
         {
-            BuildingState? b = area.Buildings.FirstOrDefault(x => x.Uuid == uuid);
-            if (b is not null)
-            {
-                area.Buildings.Remove(b);
-                affectedAreaId = area.Id;
-                RecalculateStats();
-                MarkDirty();
-                return true;
-            }
+            BuildingState? building = area.Buildings.FirstOrDefault(value => value.Uuid == uuid);
+            if (building is null || GameTableCatalog.Instance.GetDataById<CityBuildingData>(building.BuildingId)?.CanRemove != 1) continue;
+            area.Buildings.Remove(building);
+            affectedAreaId = area.Id;
+            RecalculateStats();
+            return true;
         }
         return false;
     }
 
-    public bool Zhai()
+    public Dictionary<string, object>? Rest()
     {
-        if (ActionVal < 2) return false;
-        ActionVal -= 2;
-        Player.HeroMgr.RestoreAllFatigue(5);
-        MarkDirty();
-        return true;
+        int cost = ActionVal;
+        if (cost <= 0 || !CanAct(cost) || Player.EventTrigger.HasBlockingEvents() || !CanGrantActionRewards(cost)) return null;
+        string key = $"ac{cost}";
+        int level = Player.Profile.Level;
+        int money = GameTableCatalog.Instance.GetDataById<RestMoneyData>(level)!.Int(key);
+        int exp = GameTableCatalog.Instance.GetDataById<RestExperienceData>(level)!.Int(key);
+        int fatigue = GameTableCatalog.Instance.GetDataById<RestFatigueData>(level)!.Int(key);
+        int before = TotalActions;
+        ConsumeAction(cost);
+        Dictionary<string, object> reward = Player.Profile.AddExperience(exp);
+        Player.Profile.AddMoney(money);
+        Player.HeroMgr.RestoreAllFatigue(fatigue);
+        reward["money"] = money;
+        reward["fatigue"] = fatigue;
+        for (int i = before + 1; i <= TotalActions; i++)
+        {
+            if (GameTableCatalog.Instance.GetDataById<CityFirstWeekData>(i) is { } row) RewardLogic.Merge(reward, RewardLogic.Grant(Player, row.Ints("reward")));
+        }
+        return reward;
     }
+
+    public bool Zhai() => Rest() is not null;
 
     public void PassAreaStage(int areaId, int stageId)
     {
-        AreaState? area = Comp.Areas.FirstOrDefault(a => a.Id == areaId);
-        if (area is null) return;
-
-        // 如果是高校学园通关 1106
-        if (areaId == 2 && stageId == 1106)
+        AreaState? area = FindArea(areaId);
+        if (area is null || area.Status != 1 || area.CurrentStage != stageId || Comp.PassedStages.Contains(stageId)) return;
+        Comp.PassedStages.Add(stageId);
+        area.CurrentStage = area.StageIds.FirstOrDefault(id => !Comp.PassedStages.Contains(id));
+        if (area.CurrentStage == 0)
         {
-            area.Status = 0; // FREE
-            area.CurrentStage = 0;
-
-            // 解锁东方古街 (Area 3) 与 中央城区 (Area 4)
-            AreaState? a3 = Comp.Areas.FirstOrDefault(a => a.Id == 3);
-            if (a3 is not null) { a3.Status = 1; a3.Lock = false; }
-            AreaState? a4 = Comp.Areas.FirstOrDefault(a => a.Id == 4);
-            if (a4 is not null) { a4.Status = 1; a4.Lock = false; }
+            area.Status = 0;
+            foreach (AreaState other in Comp.Areas.Where(value => value.Status == 2))
+            {
+                CityData row = GameTableCatalog.Instance.GetDataById<CityData>(other.Id)!;
+                List<int> requirements = row.AreaRequire.GetValueOrDefault(Player.Story.Route) ?? row.AreaRequire.GetValueOrDefault("-1") ?? [];
+                if (requirements.Count > 0 && requirements.All(id => id == 0 || FindArea(id)?.Status == 0)) other.Status = 1;
+            }
         }
-        else
+        RecalculateStats();
+    }
+
+    public void ApplyEvent(EventContentData row)
+    {
+        foreach ((string field, int status) in new[] { ("areaFree", 0), ("areaFight", 1), ("areaFall", 2) })
         {
-            area.CurrentStage = stageId + 1;
+            foreach (int id in row.Ints(field))
+            {
+                if (FindArea(id) is { } area) area.Status = status;
+            }
         }
+        foreach (int id in row.Ints("areaLock")) { if (FindArea(id) is { } area) area.Lock = true; }
+        foreach (int id in row.Ints("areaUnlock")) { if (FindArea(id) is { } area) area.Lock = false; }
+        foreach (int id in row.Ints("areaCR7")) { if (FindArea(id) is { } area) area.Cr = true; }
+        foreach (var pair in row.Map("changeBlackcore")) SetBlackcore(pair.Key, MainlineTable.Number(pair.Value));
+        foreach (var pair in row.Map("batchChangeBlackcore"))
+        {
+            foreach (int id in Comp.Blackcores.Where(value => value.Value == pair.Key).Select(value => value.Key).ToArray())
+                SetBlackcore(id, MainlineTable.Number(pair.Value));
+        }
+        foreach (int building in row.Ints("hiddenBuilding")) { if (!Comp.HiddenBuildings.Contains(building)) Comp.HiddenBuildings.Add(building); }
+        if (row.Flag("complete_newbee_patrol")) Comp.NewbeePatrolComplete = true;
+        foreach (var pair in row.Map("buildBuilding"))
+        {
+            var values = MainlineTable.Elements(pair.Value);
+            AreaState area = FindArea(pair.Key)!;
+            int id = MainlineTable.Number(values[0]);
+            int count = MainlineTable.Number(values[1]);
+            for (int i = 0; i < count; i++)
+            {
+                int slot = Enumerable.Range(1, area.MaxBuildingNum).First(value => area.Buildings.All(building => building.Slot != value));
+                area.Buildings.Add(new BuildingState { Slot = slot, BuildingId = id, Uuid = Guid.NewGuid().ToString("N") });
+            }
+        }
+        foreach (int id in row.Ints("destroyPatrolBuild"))
+            if (FindArea(PatrolArea) is { } area) foreach (var building in area.Buildings.Where(value => value.BuildingId == id).ToArray()) area.Buildings.Remove(building);
+        foreach (var tuple in row.List("destroyAreaPatrolBuild"))
+        {
+            var pair = MainlineTable.Elements(tuple);
+            if (FindArea(MainlineTable.Number(pair[0])) is { } area)
+                foreach (var building in area.Buildings.Where(value => value.BuildingId == MainlineTable.Number(pair[1])).ToArray()) area.Buildings.Remove(building);
+        }
+        RefreshStages();
+        RecalculateStats();
+    }
 
+    public bool CanApplyEvent(EventContentData row)
+    {
+        if (row.List("destroyAreaPatrolBuild").Any(value => MainlineTable.Elements(value).Length != 2)) return false;
+        foreach (string field in new[] { "areaFree", "areaFight", "areaFall", "areaLock", "areaUnlock", "areaCR7" })
+            if (row.Ints(field).Any(id => FindArea(id) is null)) return false;
+        foreach (var pair in row.Map("changeBlackcore"))
+            if (FindArea(pair.Key) is null || MainlineTable.Number(pair.Value, -1) is < 0 or > 2) return false;
+        foreach (var pair in row.Map("batchChangeBlackcore"))
+            if (pair.Key is < 0 or > 2 || MainlineTable.Number(pair.Value, -1) is < 0 or > 2) return false;
+        foreach (var pair in row.Map("buildBuilding"))
+        {
+            var values = MainlineTable.Elements(pair.Value);
+            if (values.Length != 2 || FindArea(pair.Key) is not { } area) return false;
+            if (GameTableCatalog.Instance.GetDataById<CityBuildingData>(MainlineTable.Number(values[0])) is null) return false;
+            int count = MainlineTable.Number(values[1]);
+            if (count < 0 || area.Buildings.Count + count > area.MaxBuildingNum) return false;
+        }
+        return row.Ints("intelligence").All(Player.Intelligence.CanAdd);
+    }
+
+    public void SetBlackcore(int area, int state)
+    {
+        if (!Comp.Blackcores.ContainsKey(area) || state is < 0 or > 2) throw new InvalidOperationException("黑核状态无效");
+        Comp.Blackcores[area] = state;
+        Notify("updateBlackCore", new() { ["c"] = state, ["b"] = area });
+        MarkDirty();
+    }
+
+    public void ApplyReward(RewardData row)
+    {
+        if (row.Has("buildFund")) BuildFund = checked(BuildFund + row.Int("buildFund"));
+        foreach (int id in row.Ints("buildableBuilding")) if (!Comp.HiddenBuildings.Contains(id)) Comp.HiddenBuildings.Add(id);
+        foreach (var tuple in row.List("destroyBuliding"))
+        {
+            var values = MainlineTable.Elements(tuple);
+            AreaState? area = FindArea(MainlineTable.Number(values[0]));
+            if (area is null) continue;
+            foreach (BuildingState building in area.Buildings.Where(value => value.BuildingId == MainlineTable.Number(values[1])).ToArray()) area.Buildings.Remove(building);
+        }
+        if (row.Has("buildableBuilding") || row.Has("destroyBuliding")) RecalculateStats();
+        MarkDirty();
+    }
+
+    public bool ConsumeIntelligence(int amount)
+    {
+        if (amount < 0 || DevelopValCount < amount) return false;
+        DevelopValCount -= amount;
+        return true;
+    }
+
+    public void RefreshIntelligence() => DevelopValCount = DevelopVal;
+
+    public void DestroyIntelligenceBuilding(out int areaId, out int buildingId)
+    {
+        areaId = buildingId = 0;
+        var candidates = Comp.Areas.Where(area => area.Status == 0).SelectMany(area => area.Buildings.Select(building => (area, building)))
+            .Where(pair => GameTableCatalog.Instance.GetDataById<CityBuildingData>(pair.building.BuildingId) is { Type: 1 or 2 or 3, CanRemove: 1 }).ToArray();
+        if (candidates.Length == 0) return;
+        var selected = candidates[Random.Shared.Next(candidates.Length)];
+        areaId = selected.area.Id;
+        buildingId = selected.building.BuildingId;
+        selected.area.Buildings.Remove(selected.building);
+        RecalculateStats();
+    }
+
+    public void EndActions() { Comp.EndedActions = true; MarkDirty(); }
+
+    public bool PrepareNextDay()
+    {
+        if (Player.WeekNum.CanAdvance() != "ok") return false;
+        if (ActionVal > 0) ConsumeAction(ActionVal);
+        EndActions();
+        Synchronize();
+        return true;
+    }
+
+    public void NewDay(bool final)
+    {
+        Comp.ActionVal = final ? 0 : DailyAction;
+        Comp.DailyConsumedAction = 0;
+        Comp.PatrolNum = 1;
+        Comp.EndedActions = false;
+        FinishPatrol();
         MarkDirty();
     }
 }

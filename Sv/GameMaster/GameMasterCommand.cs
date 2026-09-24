@@ -22,6 +22,7 @@ public static class GameMasterCommandRegistry
         CurrencyCommands.Money,
         CityCommands.Clear,
         CityCommands.ResetWeek,
+        CityCommands.Status,
         OtherCommands.Help,
     ];
 

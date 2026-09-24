@@ -32,11 +32,16 @@ public sealed class Player
         Social = Add(new SocialLogic(this));
         Chat = Add(new ChatLogic(this));
         Intelligence = Add(new IntelligenceLogic(this));
+        Story = Add(new StoryLogic(this));
+        EventTrigger = Add(new EventTriggerLogic(this));
+        Newbee = Add(new NewbeeLogic(this));
+        Combat = Add(new CombatLogic(this));
+        Rpc = Add(new RpcLogic(this));
     }
 
     public long Uid { get; }
 
-    public PlayerSaveData SaveData { get; }
+    public PlayerSaveData SaveData { get; private set; }
 
     public PlayerProfileLogic Profile { get; }
 
@@ -55,6 +60,13 @@ public sealed class Player
     public ChatLogic Chat { get; }
 
     public IntelligenceLogic Intelligence { get; }
+
+    public StoryLogic Story { get; }
+    public EventTriggerLogic EventTrigger { get; }
+    public NewbeeLogic Newbee { get; }
+    public CombatLogic Combat { get; }
+    public RpcLogic Rpc { get; }
+    public event Action<string, Dictionary<string, object>>? Notification;
 
     public bool IsDirty { get; private set; }
 
@@ -80,7 +92,7 @@ public sealed class Player
         ArgumentNullException.ThrowIfNull(blob);
         PlayerSaveData saveData = PlayerSaveData.Parser.ParseFrom(blob);
         Player player = new(uid, saveData);
-        player.OnLoad();
+        lock (player.SyncRoot) player.OnLoad();
         return player;
     }
 
@@ -147,43 +159,22 @@ public sealed class Player
             ["level"] = Profile.Level,
             ["money"] = Profile.Money,
             ["crystal"] = Profile.Crystal,
-            ["weeknum"] = new Dictionary<string, object>
+            ["exp"] = Profile.Experience,
+            ["summonCoin"] = Profile.SummonCoin,
+            ["cgs"] = Story.Cgs.ToArray(),
+            ["ccgs"] = Story.CurrentCgs,
+            ["weeknum"] = WeekNum.ToSnapshot(),
+            ["status"] = Status.ToSnapshot(),
+            ["city"] = City.ToCityDataSnapshot(),
+            ["std"] = Story.ToSnapshot(),
+            ["eventTrigger"] = EventTrigger.ToSnapshot(),
+            ["nbd"] = Newbee.ToSnapshot(),
+            ["combat"] = Combat.ToSnapshot(),
+            ["bs"] = EventTrigger.ToBattleSnapshot(),
+            ["ldd"] = Newbee.ToSummonSnapshot(),
+            ["reward"] = new Dictionary<string, object>
             {
-                ["w"] = WeekNum.Week,
-                ["d"] = WeekNum.Day,
-                ["c"] = new Dictionary<string, object>(),
-                ["l"] = new Dictionary<string, object>(),
-            },
-            ["status"] = new Dictionary<string, object> { ["c"] = Status.CurrentStatus },
-            ["city"] = new Dictionary<string, object>
-            {
-                ["dv"] = City.DevelopVal,
-                ["dvc"] = City.DevelopValCount,
-                ["av"] = City.ActionVal,
-                ["pv"] = 240,
-                ["lpc"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                ["bf"] = City.BuildFund,
-                ["fv"] = City.ForceVal,
-                ["ev"] = City.EventVal,
-                ["rv"] = City.ResearchVal,
-                ["areas"] = City.ToAreasSnapshot(),
-                ["hb"] = Array.Empty<object>(),
-                ["nbb"] = true,
-                ["dbd"] = new Dictionary<string, object>(),
-                ["pn"] = City.PatrolNum,
-                ["cc"] = 0,
-                ["tpn"] = 0,
-                ["tvn"] = 0,
-                ["tbn"] = 0,
-                ["uc"] = false,
-                ["ci"] = false,
-                ["rbn"] = 0,
-                ["coe"] = new Dictionary<string, object>(),
-                ["uda"] = false,
-                ["jpv"] = 0,
-                ["jpvt"] = 0,
-                ["mjpv"] = 0,
-                ["cjsla"] = 0,
+                ["bc"] = City.Blackcores().Where(pair => pair.Value != 0).Select(pair => (object)new[] { pair.Key, pair.Value }).ToArray(),
             },
             ["inv"] = new Dictionary<string, object>
             {
@@ -193,20 +184,12 @@ public sealed class Player
             ["heromgr"] = new Dictionary<string, object>
             {
                 ["hrs"] = HeroMgr.ToSnapshot(),
+                ["bhrs"] = HeroMgr.ToSnapshot(true),
+                ["c"] = HeroMgr.CineLocked,
                 ["cfs"] = new Dictionary<string, object>(),
             },
-            ["sd"] = new Dictionary<string, object>
-            {
-                ["sm"] = new Dictionary<string, object>(),
-                ["pm"] = new Dictionary<string, object>(),
-                ["epm"] = new Dictionary<string, object>(),
-                ["fe"] = Array.Empty<object>(),
-            },
-            ["intelligence"] = new Dictionary<string, object>
-            {
-                ["is"] = Array.Empty<object>(),
-                ["rd"] = Intelligence.Readed,
-            },
+            ["sd"] = Social.ToSnapshot(),
+            ["intelligence"] = Intelligence.ToSnapshot(),
         };
 
         byte[] message = MessagePackSerializer.Serialize(snapshot);
@@ -221,6 +204,15 @@ public sealed class Player
     internal void MarkDirty() => IsDirty = true;
 
     internal void MarkSaved() => IsDirty = false;
+
+    internal void Restore(byte[] blob)
+    {
+        if (!Monitor.IsEntered(SyncRoot)) throw new InvalidOperationException("恢复存档必须持有玩家锁");
+        SaveData = PlayerSaveData.Parser.ParseFrom(blob);
+        OnLoad();
+    }
+
+    internal void Notify(string method, Dictionary<string, object> arguments) => Notification?.Invoke(method, arguments);
 
     private T Add<T>(T logic) where T : PlayerLogicBase
     {

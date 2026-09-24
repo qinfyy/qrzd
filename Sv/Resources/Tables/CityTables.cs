@@ -101,6 +101,15 @@ public sealed class CityBuildingData : TableBase
     [JsonPropertyName("area_building_require")]
     public Dictionary<int, int> AreaBuildingRequire { get; set; } = [];
 
+    [JsonPropertyName("mc")]
+    public int MoneyCost { get; set; }
+
+    [JsonPropertyName("ml")]
+    public int MaxLimit { get; set; }
+
+    [JsonPropertyName("al")]
+    public Dictionary<int, int> AreaLimit { get; set; } = [];
+
     public override void SetKey(JsonElement key)
     {
         if (key.ValueKind == JsonValueKind.Number && key.TryGetInt32(out int id))
@@ -209,6 +218,11 @@ public sealed class CityPatrolData : TableBase
 
     [JsonPropertyName("ir")]
     public int Ir { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement> Fields { get; set; } = [];
+
+    public int InsightRequirement(int patrolCount) => Fields.TryGetValue($"ir{patrolCount}", out JsonElement value) ? value.GetInt32() : Ir;
 
     public static int MakeId(int cityId, int patrolCount) => (cityId << 16) | (patrolCount & 0xFFFF);
 

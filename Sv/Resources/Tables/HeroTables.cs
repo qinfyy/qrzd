@@ -49,6 +49,9 @@ public sealed class HeroData : TableBase
     [JsonPropertyName("attrs")]
     public Dictionary<string, double> Attrs { get; set; } = [];
 
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement> Additional { get; set; } = [];
+
     [JsonPropertyName("constructValue")]
     public int ConstructValue { get; set; }
 
@@ -121,6 +124,9 @@ public sealed class HeroStarSkillData : TableBase
 
     [JsonPropertyName("cumLeadershipValue")]
     public int LeadershipBonus { get; set; }
+
+    [JsonPropertyName("cumSkills")]
+    public Dictionary<int, int> Skills { get; set; } = [];
 
     public override void SetKey(JsonElement key)
     {

@@ -61,6 +61,7 @@ public sealed class GatewaySession
     public string Stage { get; private set; } = "seed";
 
     public bool IsClosed => Volatile.Read(ref _closed) != 0;
+    public bool ReliableInitialized { get; internal set; }
 
     public void SetStage(string stage) => Stage = stage;
 
@@ -233,8 +234,8 @@ public sealed class GatewaySession
                     string regHash = Convert.ToHexString(registration.Md5.Span);
                     string regName = GatewayRouter.GetRpcName(regHash);
                     if (regName == "Unknown") regName = "register_method";
-                    _logger.Information("收到 Gateway RPC，连接 {ConnectionId}，RPC Name {CommandID}，RPC Hash {CommandName} ，参数长度 {Length}，状态 {State}",
-                        ConnectionId, regName, regHash, frame.Payload.Length, Stage);
+                    _logger.Debug("Gateway 方法索引注册，连接 {ConnectionId} method={Method} hash={Hash} index={Index}",
+                        ConnectionId, regName, regHash, registration.Index);
                     continue;
                 }
 

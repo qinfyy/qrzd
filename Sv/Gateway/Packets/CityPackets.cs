@@ -17,12 +17,14 @@ internal static class BsonHelper
         if (obj is string s) return new BsonString(s);
         if (obj is bool b) return new BsonBoolean(b);
         if (obj is double d) return new BsonDouble(d);
-        if (obj is IDictionary<string, object> dict)
+        if (obj is byte[] bytes) return new BsonBinaryData(bytes);
+        if (obj is System.Collections.IDictionary dict)
         {
+            if (dict.Count == 1 && dict.Contains("$oid")) return new BsonObjectId(ObjectId.Parse((string)dict["$oid"]!));
             BsonDocument doc = new();
-            foreach (KeyValuePair<string, object> kvp in dict)
+            foreach (System.Collections.DictionaryEntry kvp in dict)
             {
-                doc[kvp.Key] = ToBsonVal(kvp.Value);
+                doc[Convert.ToString(kvp.Key, System.Globalization.CultureInfo.InvariantCulture)!] = ToBsonVal(kvp.Value);
             }
             return doc;
         }

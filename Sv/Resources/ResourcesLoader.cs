@@ -57,7 +57,7 @@ public static class ResourcesLoader
             }
         };
 
-        // 阶段 1：顺序反序列化并触发各行 OnLoad
+        // 顺序反序列化并触发各行 OnLoad
         LoadTable<HeroData>(HeroData.TableFileName);
         LoadTable<HeroStarSkillData>(HeroStarSkillData.TableFileName);
         LoadTable<ItemData>(ItemData.TableFileName);
@@ -67,11 +67,44 @@ public static class ResourcesLoader
         LoadTable<CityUpgradeData>(CityUpgradeData.TableFileName);
         LoadTable<CityPatrolData>(CityPatrolData.TableFileName);
         LoadTable<BuildingData>(BuildingData.TableFileName);
+        LoadTable<EventContentData>("event_content");
+        LoadTable<EventConditionData>("event_condition");
+        LoadTable<EventDialogueData>("event_dialogue");
+        LoadTable<NewbeeData>("newbee");
+        LoadTable<MissionData>("mission");
+        LoadTable<RewardData>("reward_common");
+        LoadTable<CityFirstWeekData>("city_first_week_data");
+        LoadTable<FightFirstWeekData>("fight_first_week_data");
+        LoadTable<EndingData>("ending_data");
+        LoadTable<MissionHeroData>("mission_hero_attr");
+        LoadTable<CityFightRewardData>("city_fight_reward");
+        LoadTable<BuildRewardData>("build_reward");
+        LoadTable<DevelopRewardData>("develop_reward");
+        LoadTable<PatrolRewardData>("patrol_reward");
+        LoadTable<RestMoneyData>("zhai_money");
+        LoadTable<RestFatigueData>("zhai_fatigue");
+        LoadTable<RestExperienceData>("zhai_exp");
+        LoadTable<PlayerExperienceData>("player_exp");
+        LoadTable<IntelligenceAffectData>("intelligence_affect");
+        LoadTable<CityWeekBuildingData>("city_week_building");
+        LoadTable<PrivateMessageData>("private_msg");
+        LoadTable<TerminalMessageData>("social_msg");
+        LoadTable<IntelligenceData>("intelligence");
+        LoadTable<MainlineWeekData>("mainline_week_info");
+        LoadTable<FatigueRecoveryData>("fatigue_recover");
+        LoadTable<IntelligenceRefreshData>("refresh_intelligence");
+        LoadTable<RandomRewardData>("reward_random");
+        LoadTable<HeroTreasureData>("hero_treasure");
+        LoadTable<HeroStarAttributeData>("hero_star_attr");
+        LoadTable<CgData>("cg_data");
+        LoadTable<WeekendScoreData>("weekend_score");
+        LoadTable<WeekendConditionData>("weekend_cond");
+        LoadTable<WeekendCityScoreData>("weekend_cityscore");
 
-        // 阶段 2：构建跨表外键引用与二级索引
+        // 构建跨表外键引用与二级索引
         _catalog.BroadcastOnFinalize();
 
-        // 阶段 3：跨表约束与资源完整性校验
+        // 跨表约束与完整性校验
         _catalog.BroadcastVerification();
 
         _catalog.IsLoaded = true;
@@ -122,10 +155,7 @@ public static class ResourcesLoader
                     id = keyId;
                 }
 
-                if (id != 0)
-                {
-                    dataMap[id] = row.Value;
-                }
+                dataMap[id] = row.Value;
             }
 
             _catalog.PushTable(dataMap);

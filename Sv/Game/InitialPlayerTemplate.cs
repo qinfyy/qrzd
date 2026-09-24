@@ -15,6 +15,11 @@ public static class InitialPlayerTemplate
         saveData.HeroMgrComp ??= new HeroMgrComp();
         saveData.SocialComp ??= new SocialComp();
         saveData.IntelligenceComp ??= new IntelligenceComp();
+        saveData.StoryComp ??= new StoryComp();
+        saveData.EventTriggerComp ??= new EventTriggerComp();
+        saveData.NewbeeComp ??= new NewbeeComp();
+        saveData.CombatComp ??= new CombatComp();
+        saveData.RpcComp ??= new RpcComp();
     }
 
     public static void ApplyTo(PlayerSaveData saveData, long uid, string nickName, int serverId, string avatarId)
@@ -29,10 +34,16 @@ public static class InitialPlayerTemplate
         saveData.ProfileComp.AvatarId = avatarId;
         saveData.ProfileComp.ServerId = serverId;
 
-        saveData.WeekNumComp.Week = 1;
+        saveData.WeekNumComp.Week = 0;
         saveData.WeekNumComp.Day = 0;
 
         saveData.StatusComp.CurrentStatus = "city";
+        saveData.StatusComp.Emergency = true;
+        saveData.StoryComp.Route = "1";
+        saveData.StoryComp.ClientEventFinish = true;
+        saveData.NewbeeComp.InitPrologue = true;
+        saveData.IntelligenceComp.GeneratedDay = -1;
+        saveData.IntelligenceComp.EndedDay = -1;
 
         saveData.CityComp.ActionVal = 24;
         saveData.CityComp.DevelopVal = 0;

@@ -46,6 +46,7 @@ public sealed class GatewayRouter
 
     private readonly LoginHandlers _loginHandlers = new();
     private readonly PlayerHandlers _playerHandlers = new();
+    private readonly MainlineHandlers _mainlineHandlers = new();
 
     public static int RpcCount => HashToName.Count;
 
@@ -126,31 +127,22 @@ public sealed class GatewayRouter
                 break;
 
             case "syncAllIntelligenceRequest":
-                _playerHandlers.OnSyncAllIntelligence(session, args);
-                break;
-
             case "pullEvents":
-                _playerHandlers.OnPullEvents(session, PullEventsRequestPacket.FromBson(args));
+                _mainlineHandlers.OnRequest(session, rpcName, args);
                 break;
 
             case "reliableRpcCall":
                 ReliableRpcRequestPacket? rpc = ReliableRpcRequestPacket.FromBson(args);
                 if (rpc is not null)
                 {
-                    _playerHandlers.OnReliableRpcCall(session, rpc);
+                    _mainlineHandlers.OnRequest(session, rpc.SubMethod ?? "", rpc.Parameters ?? new BsonDocument(), rpc.RpcSeq, rpc.Cbid);
                 }
                 break;
 
             case "getAllAreaInfoRequest":
-                _playerHandlers.OnGetAllAreaInfoRequest(session, args);
-                break;
-
             case "getAreaInfoRequest":
-                _playerHandlers.OnGetAreaInfoRequest(session, args);
-                break;
-
             case "playerDestroyBuilding":
-                _playerHandlers.OnPlayerDestroyBuilding(session, args);
+                _mainlineHandlers.OnRequest(session, rpcName, args);
                 break;
 
             case "teamOnLoginAsk":
@@ -166,15 +158,17 @@ public sealed class GatewayRouter
                 break;
 
             case "enterPlace":
-                _playerHandlers.OnEnterPlace(session, args);
-                break;
-
             case "tutorialBegin":
-                _playerHandlers.OnTutorialBegin(session, args);
+            case "updateStoryClickFlag":
+                _mainlineHandlers.OnRequest(session, rpcName, args);
                 break;
 
-            case "updateStoryClickFlag":
-                _playerHandlers.OnUpdateStoryClickFlag(session, args);
+            case "add_chat_msg":
+                _playerHandlers.OnAddChatMsg(session, args);
+                break;
+
+            case "incHeroStarOrder":
+                _playerHandlers.OnIncHeroStarOrder(session, HeroStarOrderRequestPacket.FromBson(args));
                 break;
 
             case "logout":
@@ -182,7 +176,7 @@ public sealed class GatewayRouter
                 break;
 
             default:
-                Logger.Warning("Gateway {ConnectionId} 暂未专门处理 RPC 方法 {Method} 哈希 {MethodHash}", session.ConnectionId, rpcName, rpcHash);
+                _mainlineHandlers.OnRequest(session, rpcName, args);
                 break;
         }
     }

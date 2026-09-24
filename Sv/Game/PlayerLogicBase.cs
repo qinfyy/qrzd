@@ -16,6 +16,8 @@ public abstract class PlayerLogicBase
 
     public void MarkDirty() => Player.MarkDirty();
 
+    protected void Notify(string method, Dictionary<string, object> arguments) => Player.Notify(method, arguments);
+
     protected internal virtual void OnCreate()
     {
     }
