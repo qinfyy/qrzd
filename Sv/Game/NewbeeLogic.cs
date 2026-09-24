@@ -1,3 +1,5 @@
+using Serilog;
+using Sv.Configuration;
 using Sv.Database;
 using Sv.Resources;
 using Sv.Resources.Tables;
@@ -6,17 +8,72 @@ namespace Sv.Game;
 
 public sealed class NewbeeLogic(Player player) : PlayerLogicBase(player)
 {
+    private static readonly ILogger Logger = Log.ForContext<NewbeeLogic>();
     private NewbeeComp Comp => Player.SaveData.NewbeeComp;
-    public bool IsFinished(int id) => Comp.Finished.Contains(id);
+    public bool Enabled => Config.Server.EnableNewbieTutorial;
+    public bool IsFinished(int id) => !Enabled || Comp.Finished.Contains(id);
     public bool CanSummon => Player.WeekNum.Week == 0 && Player.WeekNum.Day == 0 && Player.EventTrigger.IsCompleted(1021);
     public bool SummonClaimed => Comp.SummonClaimed;
-    public int[] Processing => Comp.Processing.ToArray();
+    public int[] Processing => Enabled ? Comp.Processing.ToArray() : [];
 
-    public Dictionary<string, object> ToSnapshot() => new() { ["fn"] = Comp.Finished.ToArray(), ["pe"] = Processing, ["ip"] = Comp.InitPrologue };
+    public Dictionary<string, object> ToSnapshot() => new()
+    {
+        ["fn"] = Enabled ? Comp.Finished.ToArray() : GameTableCatalog.Instance.GetAllData<NewbeeData>().Select(row => row.Id).Union(Comp.Finished).ToArray(),
+        ["pe"] = Processing, ["ip"] = Enabled && Comp.InitPrologue, ["id"] = Enabled,
+    };
     public Dictionary<string, object> ToSummonSnapshot() => new() { ["ct"] = SummonClaimed ? 1 : 0, ["iof"] = Comp.SummonOpen };
+
+    protected internal override void OnLogin() => ApplyConfiguration();
+
+    internal void ApplyConfiguration()
+    {
+        if (Enabled) return;
+        if (!Comp.IntroductionSkipped && Player.WeekNum.Week == 0 && Player.WeekNum.Day == 0 && Player.Story.Route == "1" &&
+            Player.WeekNum.EndingId == 0 && !Player.EventTrigger.IsCompleted(1047))
+        {
+            // Skip only the introduction. Event rewards remain one-shot, and no battle result is forged.
+            foreach (int id in new[] { 1, 3, 6, 1000, 1006 }) Player.EventTrigger.SkipTutorialEvent(id);
+            foreach (int id in new[] { 1016, 1017, 1041, 1020 })
+                if (Player.EventTrigger.Find(id) is not null) Player.EventTrigger.SkipTutorialEvent(id);
+            if (!new[] { 1015, 1016, 1017 }.Any(Player.EventTrigger.IsCompleted)) Player.EventTrigger.SkipTutorialEvent(1015);
+            foreach (int id in new[] { 1018, 1019, 8, 1001, 1002, 1004, 1021 }) Player.EventTrigger.SkipTutorialEvent(id);
+
+            if (!SummonClaimed && (!OpenSummon(0) || DrawSummon(0, 2) is null)) throw new InvalidOperationException("跳过引导时教学召唤配置无效");
+            CloseSummon(0);
+            int[] introductions = [1038, 1039, 1040];
+            if (!introductions.Any(Player.EventTrigger.IsCompleted))
+            {
+                int introduction = introductions.First(id => GameTableCatalog.Instance.GetDataById<EventConditionData>(id)!.Rules[24].Integers.Contains(Comp.SummonHero));
+                Player.EventTrigger.SkipTutorialEvent(introduction);
+            }
+            Player.Combat.SkipIntroduction();
+            Player.EventTrigger.SkipTutorialEvent(1043);
+            Player.City.SkipIntroductionBattle();
+            foreach (int id in new[] { 10000, 1007, 1008, 1009, 1022, 1010, 1011, 1025, 1013, 1005, 1024, 1047 }) Player.EventTrigger.SkipTutorialEvent(id);
+            if (Player.City.PatrolArea == 1) Player.City.FinishPatrol();
+            foreach (int id in new[] { 10, 11, 30, 40, 41, 42, 43, 44, 90, 93 }.SelectMany(Chain).Distinct())
+                if (!Comp.Finished.Contains(id)) Comp.Finished.Add(id);
+            Comp.InitPrologue = false;
+            Comp.TutorialBegan = true;
+            Comp.IntroductionSkipped = true;
+            Player.Status.SetEmergency(false);
+            Player.Status.CurrentStatus = "city";
+            Player.Story.SetPlace(0);
+            Logger.Information("City UID={Uid} 已按配置跳过新手引导，保留 week={Week} day={Day} action={Action}",
+                Player.Uid, Player.WeekNum.Week, Player.WeekNum.Day, Player.City.ActionVal);
+            MarkDirty();
+        }
+        if (Comp.Processing.Count > 0)
+        {
+            Comp.Processing.Clear();
+            MarkDirty();
+        }
+        Player.EventTrigger.Refresh(false);
+    }
 
     public bool CanTrigger(int id)
     {
+        if (!Enabled) return false;
         NewbeeData? row = GameTableCatalog.Instance.GetDataById<NewbeeData>(id);
         if (row is null || row.Flag("battle_newbee") || !Player.Story.ClientEventFinished) return false;
         if (IsFinished(id) && !row.Flag("multi_trigger")) return false;
@@ -46,6 +103,11 @@ public sealed class NewbeeLogic(Player player) : PlayerLogicBase(player)
 
     public bool Request(int id)
     {
+        if (!Enabled)
+        {
+            Synchronize();
+            return GameTableCatalog.Instance.GetDataById<NewbeeData>(id) is not null;
+        }
         if (!CanTrigger(id)) return false;
         NewbeeData row = GameTableCatalog.Instance.GetDataById<NewbeeData>(id)!;
         if (!row.Flag("begin_newbee") && !Comp.Processing.Any(root => Chain(root).Contains(id))) return false;
@@ -67,7 +129,10 @@ public sealed class NewbeeLogic(Player player) : PlayerLogicBase(player)
     public bool Finish(int[] ids)
     {
         if (ids.Length == 0 || ids.Length > 20 || ids.Distinct().Count() != ids.Length) return false;
+        if (ids.Any(id => GameTableCatalog.Instance.GetDataById<NewbeeData>(id) is null)) return false;
+        if (!Enabled) { Synchronize(); return true; }
         HashSet<int> allowed = Comp.Processing.ToHashSet();
+        if (Player.Combat.Active is { State: 1, Type: 2, Stage: 104, EventId: 1 }) allowed.UnionWith([40, 41, 42, 43, 44]);
         foreach (int root in Comp.Processing)
         {
             foreach (int step in Chain(root)) allowed.UnionWith(GameTableCatalog.Instance.GetDataById<NewbeeData>(step)!.Ints("complete_newbee"));
@@ -92,7 +157,8 @@ public sealed class NewbeeLogic(Player player) : PlayerLogicBase(player)
 
     public bool PassPrologue()
     {
-        if (!Player.EventTrigger.IsCompleted(6)) return false;
+        if (!Enabled || !Comp.InitPrologue) return true;
+        if (Player.Combat.Active is not { State: 1, Type: 2, Stage: 104, EventId: 1 } && !Player.EventTrigger.IsCompleted(6)) return false;
         Comp.InitPrologue = false;
         MarkDirty();
         return true;
@@ -142,6 +208,7 @@ public sealed class NewbeeLogic(Player player) : PlayerLogicBase(player)
         Comp.Processing.Clear();
         Comp.InitPrologue = true;
         Comp.TutorialBegan = Comp.SummonClaimed = Comp.SummonOpen = false;
+        Comp.IntroductionSkipped = false;
         Comp.SummonHero = 0;
         MarkDirty();
     }

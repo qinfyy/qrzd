@@ -344,14 +344,31 @@ public sealed class CityLogic(Player player) : PlayerLogicBase(player)
         if (area.CurrentStage == 0)
         {
             area.Status = 0;
-            foreach (AreaState other in Comp.Areas.Where(value => value.Status == 2))
-            {
-                CityData row = GameTableCatalog.Instance.GetDataById<CityData>(other.Id)!;
-                List<int> requirements = row.AreaRequire.GetValueOrDefault(Player.Story.Route) ?? row.AreaRequire.GetValueOrDefault("-1") ?? [];
-                if (requirements.Count > 0 && requirements.All(id => id == 0 || FindArea(id)?.Status == 0)) other.Status = 1;
-            }
+            UnlockAdjacentAreas();
         }
         RecalculateStats();
+    }
+
+    private void UnlockAdjacentAreas()
+    {
+        foreach (AreaState other in Comp.Areas.Where(value => value.Status == 2))
+        {
+            CityData row = GameTableCatalog.Instance.GetDataById<CityData>(other.Id)!;
+            List<int> requirements = row.AreaRequire.GetValueOrDefault(Player.Story.Route) ?? row.AreaRequire.GetValueOrDefault("-1") ?? [];
+            if (requirements.Count > 0 && requirements.All(id => id == 0 || FindArea(id)?.Status == 0)) other.Status = 1;
+        }
+    }
+
+    internal void SkipIntroductionBattle()
+    {
+        if (Player.Newbee.Enabled) throw new InvalidOperationException("新手引导已启用");
+        AreaState area = FindArea(1) ?? throw new InvalidOperationException("缺少中央庭存档");
+        area.Status = 0;
+        area.CurrentStage = 0;
+        UnlockAdjacentAreas();
+        RefreshStages();
+        RecalculateStats();
+        MarkDirty();
     }
 
     public void ApplyEvent(EventContentData row)

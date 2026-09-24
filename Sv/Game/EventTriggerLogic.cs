@@ -86,16 +86,50 @@ public sealed class EventTriggerLogic(Player player) : PlayerLogicBase(player)
         _refreshing = true;
         try
         {
+            if (!Player.Newbee.Enabled)
+            {
+                foreach (int id in Processing)
+                    if (GameTableCatalog.Instance.GetDataById<EventContentData>(id) is { } row && IsStandaloneTutorial(row)) SkipTutorialEvent(id);
+            }
             for (int i = 0; i < 256; i++)
             {
-                EventContentData? automatic = Available().FirstOrDefault(row => row.Flag("autoStart") && row.IsPresentationOnly && !row.Patrol);
+                EventContentData? automatic = Available().FirstOrDefault(row => !row.Patrol &&
+                    (row.Flag("autoStart") && row.IsPresentationOnly || !Player.Newbee.Enabled && IsStandaloneTutorial(row)));
                 if (automatic is null) break;
+                if (!Player.Newbee.Enabled && IsStandaloneTutorial(automatic))
+                {
+                    SkipTutorialEvent(automatic.Id);
+                    continue;
+                }
                 Begin(automatic);
                 Complete(automatic, Find(automatic.Id)!);
             }
             if (push) Push();
         }
         finally { _refreshing = false; }
+    }
+
+    private static bool IsStandaloneTutorial(EventContentData row) => row.Int("newbee_event") > 0 && row.Battle == 0 && row.NextEvents.Length == 0 &&
+        row.Ints("contentFinishBattle").Length == 0 && row.CompletionConditions.Keys.All(kind => kind == "dialog") &&
+        (GameTableCatalog.Instance.GetDataById<EventDialogueData>(row.DialogueId) is not { } dialog || dialog.List("opts").Length == 0 && dialog.Int("finish_event") == 0);
+
+    internal void SkipTutorialEvent(int eventId)
+    {
+        EventContentData? row = GameTableCatalog.Instance.GetDataById<EventContentData>(eventId);
+        if (Player.Newbee.Enabled || row is null || !(row.Flag("newbee") || eventId is 10000 or 1041 or 1047 || IsStandaloneTutorial(row)))
+            throw new InvalidOperationException($"不可跳过非引导剧情 {eventId}");
+        if (IsCompleted(eventId))
+        {
+            if (Find(eventId) is { } processing) Comp.ProcessingEvents.Remove(processing);
+            Comp.QueuedEvents.Remove(eventId);
+            MarkDirty();
+            return;
+        }
+        if (!CanComplete(row)) throw new InvalidOperationException($"引导剧情配置暂不支持 {eventId}");
+        Comp.QueuedEvents.Remove(eventId);
+        EventProgress progress = Find(eventId) ?? new EventProgress { EventId = eventId, StartedDay = Player.WeekNum.Day };
+        if (!Comp.ProcessingEvents.Contains(progress)) Comp.ProcessingEvents.Add(progress);
+        Complete(row, progress);
     }
 
     public void Push() => Notify("pushEvents", new() { ["a"] = AvailableSnapshot(), ["p"] = Processing });

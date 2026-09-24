@@ -22,6 +22,7 @@ public sealed class ServerOptions
     public int MaxFrameBytes { get => GatewayMaxFrameBytes; init => GatewayMaxFrameBytes = value; }
 
     public string TimeZone { get; init; } = "China Standard Time";
+    public bool EnableNewbieTutorial { get; init; } = true;
 
     public int GatewayHandshakeSeconds { get; init; } = 30;
     public int HandshakeSeconds { get => GatewayHandshakeSeconds; init => GatewayHandshakeSeconds = value; }

@@ -210,6 +210,7 @@ message NewbeeComp {
     bool summon_claimed = 5;
     bool summon_open = 6;
     int32 summon_hero = 7;
+    bool introduction_skipped = 8;
 }
 
 message CombatComp {

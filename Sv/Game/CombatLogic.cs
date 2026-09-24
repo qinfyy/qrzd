@@ -130,9 +130,17 @@ public sealed class CombatLogic(Player player) : PlayerLogicBase(player)
         if (preset?.Get("artifact") is { ValueKind: JsonValueKind.Object } artifact && artifact.TryGetProperty("attrs", out var artifactValues))
             foreach (var value in artifactValues.EnumerateObject()) attributes[value.Name] = attributes.GetValueOrDefault(value.Name) + value.Value.GetDouble();
         HeroStarSkillData? skills = GameTableCatalog.Instance.GetDataById<HeroStarSkillData>(id * 100 + star * 10 + order);
-        object[] starSkills = (skills?.Skills ?? []).Select(pair => (object)new[] { pair.Key, pair.Value }).ToArray();
+        Dictionary<int, int> skillLevels = new(skills?.Skills ?? []);
+        if (temporary && mission.Id == 104)
+        {
+            // The opening battle teaches all three skills before the permanent hero is acquired.
+            foreach (int skill in row.ActiveSkills.Append(row.PassiveSkill).Where(skill => skill > 0)) skillLevels.TryAdd(skill, 1);
+        }
+        object[] starSkills = skillLevels.Select(pair => (object)new[] { pair.Key, pair.Value }).ToArray();
         return new()
         {
+            // The client reads this field during local battle settlement and achievement checks.
+            ["id"] = id,
             ["d"] = attributes, ["a"] = new Dictionary<string, object>(), ["s"] = new object[] { starSkills, Array.Empty<object>() },
             ["t"] = Array.Empty<object>(), ["ai"] = new object[] { false, 0 }, ["as"] = 0,
         };
@@ -209,6 +217,14 @@ public sealed class CombatLogic(Player player) : PlayerLogicBase(player)
         if (Comp.Active is not { } active) return;
         active.State = 2;
         active.PendingHero = 0;
+        Player.Status.CurrentStatus = "city";
+        MarkDirty();
+    }
+
+    internal void SkipIntroduction()
+    {
+        if (Player.Newbee.Enabled || Comp.Active is not { Stage: 101 or 104 }) return;
+        Comp.Active = null;
         Player.Status.CurrentStatus = "city";
         MarkDirty();
     }

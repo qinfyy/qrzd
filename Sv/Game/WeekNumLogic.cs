@@ -184,6 +184,7 @@ public sealed class WeekNumLogic(Player player) : PlayerLogicBase(player)
         Player.City.Reset();
         Player.Status.Reset();
         Player.Rpc.Reset();
+        Player.Newbee.ApplyConfiguration();
     }
 
     public int Week

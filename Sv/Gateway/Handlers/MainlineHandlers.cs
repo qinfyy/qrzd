@@ -10,6 +10,9 @@ namespace Sv.Gateway.Handlers;
 public sealed class MainlineHandlers
 {
     private static readonly ILogger Logger = Log.ForContext<MainlineHandlers>();
+    private static readonly HashSet<string> TelemetryMethods =
+        ["uploadDeviceInfo", "uploadTouchHistory", "logCheckCheat", "SALog", "sendSALog", "writeNewPlayerCheckpointSALogFromClient", "writeDialogSkipLog",
+            "combatUpdateAIFlag", "combatUploadFpsRecord"];
 
     public void OnRequest(GatewaySession session, string method, BsonDocument args, int sequence = 0, int callback = 0)
     {
@@ -59,7 +62,8 @@ public sealed class MainlineHandlers
             try
             {
                 Dispatch(player, method, parameters);
-                if (method is not ("pullEvents" or "reliableEcho" or "queryEventOptAsk" or "getAllAreaInfoRequest" or "getAreaInfoRequest" or "getAreaStagesRequest"))
+                if (!TelemetryMethods.Contains(method) &&
+                    method is not ("pullEvents" or "reliableEcho" or "queryEventOptAsk" or "getAllAreaInfoRequest" or "getAreaInfoRequest" or "getAreaStagesRequest"))
                     player.EventTrigger.Refresh();
             }
             catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or FormatException or InvalidCastException or OverflowException or NotSupportedException
@@ -114,7 +118,9 @@ public sealed class MainlineHandlers
         else if (SocialHandlers.Methods.Contains(method)) SocialHandlers.OnRequest(player, method, args);
         else if (method is "clientLog" or "clientError" or "reportClientError" or "reportClientException" or "exceptUpload")
             Logger.Warning("City UID={Uid} 客户端报告 {Method}: {Arguments}", player.Uid, method, args.ToJson());
-        else if (method is "uploadDeviceInfo" or "uploadTouchHistory" or "logCheckCheat" or "SALog" or "sendSALog")
+        else if (method == "writeNewPlayerCheckpointSALogFromClient")
+            Logger.Information("City UID={Uid} 新手检查点 {Checkpoint}", player.Uid, args.GetValue("d", "").ToJson());
+        else if (TelemetryMethods.Contains(method))
             Logger.Debug("City UID={Uid} 客户端遥测 {Method}: {Arguments}", player.Uid, method, args.ToJson());
         else if (method is not ("reliableRpcAck" or "askReliableRpcSeq")) throw new NotSupportedException($"首周暂未支持入口: {method}");
     }
@@ -157,7 +163,11 @@ public sealed class MainlineHandlers
         player.Notify("showMessageStr", new() { ["m"] = error });
     }
 
-    internal static int Int(BsonDocument args, string key, int fallback = 0) => args.GetValue(key, fallback).ToInt32();
+    internal static int Int(BsonDocument args, string key, int fallback = 0)
+    {
+        BsonValue value = args.GetValue(key, fallback);
+        return value.IsBoolean ? (value.AsBoolean ? 1 : 0) : value.ToInt32();
+    }
     internal static int[] Ints(BsonDocument args, string key) => args.GetValue(key, new BsonArray()).AsBsonArray.Select(value => value.ToInt32()).ToArray();
     internal static void Require(bool condition, string message = "当前条件不满足")
     {

@@ -27,8 +27,17 @@ public sealed class LoginHandlers
 
             lock (player.SyncRoot)
             {
-                player.OnLogin();
-                player.Save();
+                byte[] before = player.SaveToBlob();
+                try
+                {
+                    player.OnLogin();
+                    player.Save();
+                }
+                catch
+                {
+                    player.Restore(before);
+                    throw;
+                }
 
                 session.SendPack(new ClientAvatarPacket(session.AvatarEntityId!, player, Config.Server));
                 session.SendPack(new BecomePlayerPacket(session.AvatarEntityId!));
