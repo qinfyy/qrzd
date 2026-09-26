@@ -46,6 +46,7 @@ public sealed class GatewayRouter
 
     private readonly LoginHandlers _loginHandlers = new();
     private readonly PlayerHandlers _playerHandlers = new();
+    private readonly ChatHandlers _chatHandlers = new();
     private readonly MainlineHandlers _mainlineHandlers = new();
 
     public static int RpcCount => HashToName.Count;
@@ -164,7 +165,14 @@ public sealed class GatewayRouter
                 break;
 
             case "add_chat_msg":
-                _playerHandlers.OnAddChatMsg(session, args);
+            case "regist_chat_channel_listener":
+            case "remove_chat_channel_listener":
+            case "queryFriendStatus":
+            case "requestPlayerInfoFromClientLongList":
+            case "requestPlayerInfoKeyList":
+            case "readFriendCoin":
+            case "requestSetBindPhoneState":
+                _chatHandlers.OnRequest(session, rpcName, args);
                 break;
 
             case "incHeroStarOrder":

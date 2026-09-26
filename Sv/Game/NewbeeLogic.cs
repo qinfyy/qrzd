@@ -58,7 +58,7 @@ public sealed class NewbeeLogic(Player player) : PlayerLogicBase(player)
             Comp.IntroductionSkipped = true;
             Player.Status.SetEmergency(false);
             Player.Status.CurrentStatus = "city";
-            Player.Story.SetPlace(0);
+            Player.Story.SetPlace(1);
             Logger.Information("City UID={Uid} 已按配置跳过新手引导，保留 week={Week} day={Day} action={Action}",
                 Player.Uid, Player.WeekNum.Week, Player.WeekNum.Day, Player.City.ActionVal);
             MarkDirty();

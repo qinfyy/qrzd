@@ -18,9 +18,9 @@ public static class CurrencyCommands
     public static GameMasterCommand Money { get; } = new(
         "money",
         [],
-        "设置晶钻数量。",
+        "设置晶尘数量。",
         ["/money <num> [@uid]"],
-        ["对应客户端 crystal 与 updateCrystal。"],
+        ["对应客户端 crystal 与 updateCrystal，道具 ID 89；晶钻是 yuanbao（ID 80），不是此命令。"],
         ctx => ExecuteSet(ctx, crystal: true),
         RequireTarget: true);
 
@@ -40,6 +40,6 @@ public static class CurrencyCommands
                 session.SendPack(crystal ? GameMasterStatePacket.Crystal(entityId, value) : GameMasterStatePacket.Money(entityId, value));
             }
         }
-        ctx.SendMessage(crystal ? $"晶钻已设为 {value}" : $"金币已设为 {value}");
+        ctx.SendMessage(crystal ? $"晶尘已设为 {value}" : $"金币已设为 {value}");
     }
 }

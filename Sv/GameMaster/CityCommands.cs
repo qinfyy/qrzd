@@ -20,7 +20,7 @@ public static class CityCommands
         [],
         "重置首周主线到原版序章。",
         ["/clear [@uid]"],
-        ["与 resetweek 一致，清除本轮剧情、城市、角色、引导、战斗和消息状态；保留账号资产与历史结局。需要重新登录。"],
+        ["与 resetweek 一致，清除本轮剧情、城市、引导、战斗和消息状态；神器使只重置本周好感、疲劳和剧情限制，保留已获得神器使及养成、账号资产与历史结局。需要重新登录。"],
         ExecuteReset,
         RequireTarget: true);
 
@@ -29,7 +29,7 @@ public static class CityCommands
         [],
         "一致重置首周主线到原版序章。",
         ["/resetweek [@uid]"],
-        ["内部周目为 0，天数为 0，行动力为 24。清除本轮主线状态；保留账号资产与历史结局。需要重新登录。"],
+        ["内部周目为 0，天数为 0，行动力为 24。清除本轮主线状态；神器使只重置本周好感、疲劳和剧情限制，保留已获得神器使及养成、账号资产与历史结局。需要重新登录。"],
         ExecuteReset,
         RequireTarget: true);
 
@@ -75,7 +75,7 @@ public static class CityCommands
             target.WeekNum.ResetMainline();
             target.Save();
         }
-        ctx.SendMessage("首周主线已重置到序章，请重新登录；账号资产与历史结局保留。");
+        ctx.SendMessage("首周主线已重置，请重新登录；已获得神器使及养成、账号资产与历史结局保留。");
         session?.Close();
     }
 }

@@ -40,6 +40,7 @@ public static class InitialPlayerTemplate
         saveData.StatusComp.CurrentStatus = "city";
         saveData.StatusComp.Emergency = true;
         saveData.StoryComp.Route = "1";
+        saveData.StoryComp.Place = 1;
         saveData.StoryComp.ClientEventFinish = true;
         saveData.NewbeeComp.InitPrologue = true;
         saveData.IntelligenceComp.GeneratedDay = -1;

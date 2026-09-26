@@ -62,7 +62,7 @@ public sealed class MainlineHandlers
             try
             {
                 Dispatch(player, method, parameters);
-                if (!TelemetryMethods.Contains(method) &&
+                if (!TelemetryMethods.Contains(method) && method != "quitTeam" &&
                     method is not ("pullEvents" or "reliableEcho" or "queryEventOptAsk" or "getAllAreaInfoRequest" or "getAreaInfoRequest" or "getAreaStagesRequest"))
                     player.EventTrigger.Refresh();
             }
@@ -112,6 +112,8 @@ public sealed class MainlineHandlers
     private static void Dispatch(Player player, string method, BsonDocument args)
     {
         if (method == "updateClientAvatarAsk") player.Notify("updateClientAvatarReply", new() { ["s"] = player.ToAvatarSnapshot(Config.Server) });
+        else if (method == "setPlayerName") player.Profile.SetPlayerName(args["n"].AsString, args["in"].AsBoolean);
+        else if (method == "quitTeam") player.Notify("on_team_info", new() { ["d"] = new Dictionary<string, object>(), ["t"] = 0 });
         else if (StoryHandlers.Methods.Contains(method)) StoryHandlers.OnRequest(player, method, args);
         else if (CityHandlers.Methods.Contains(method)) CityHandlers.OnRequest(player, method, args);
         else if (CombatHandlers.Methods.Contains(method)) CombatHandlers.OnRequest(player, method, args);
@@ -128,6 +130,8 @@ public sealed class MainlineHandlers
     private static void Failure(Player player, string method, BsonDocument args, string error)
     {
         int Number(string key) => args.TryGetValue(key, out var value) && value.IsNumeric ? value.ToInt32() : 0;
+        if (method == "setPlayerName")
+            player.Notify("setPlayerNameReply", new() { ["r"] = false, ["in"] = args.GetValue("in", false).Equals(BsonBoolean.True) });
         if (method is "statusSwitch" or "statusCheck")
             player.Notify(method + "Reply", new() { ["r"] = "failed", ["s"] = args.GetValue("s", "").ToString()! });
         if (method is "startEvent" or "startEventOption") player.Notify("startEventReply", new() { ["e"] = Number("e"), ["r"] = 0 });

@@ -51,9 +51,14 @@ public sealed class HeroMgrLogic(Player player) : PlayerLogicBase(player)
 
     public Dictionary<int, int> Banned() => Comp.BannedHeroes.ToDictionary(pair => pair.Key, pair => pair.Value);
 
-    public void ResetStoryHeroes()
+    public void ResetStoryState()
     {
-        Comp.Heroes.Clear();
+        // Hero ownership and progression survive a mainline reset.
+        foreach (HeroState hero in Comp.Heroes)
+        {
+            hero.Fatigue = GameTableCatalog.Instance.GetDataById<HeroData>(hero.HeroId)?.FatigueValue ?? 100;
+            hero.Friendly = 0;
+        }
         Comp.BannedHeroes.Clear();
         Comp.CineLockedHeroes.Clear();
         MarkDirty();

@@ -26,7 +26,7 @@ public static class StoryHandlers
             case "startEventOption": Require(player.EventTrigger.SelectOption(Int(args, "e"), Int(args, "se"), Int(args, "op")), "剧情选项无效"); break;
             case "clientTraceProcessingEvent":
                 BsonValue value = args["d"].AsBsonDocument.GetValue("c", BsonNull.Value);
-                Require(args["k"].AsString == "ui" ? player.EventTrigger.TraceUi(value.AsString) : player.EventTrigger.Trace(args["k"].AsString, value.ToInt32()));
+                Require(args["k"].AsString == "ui" ? player.EventTrigger.TraceUi(value.ToInt32()) : player.EventTrigger.Trace(args["k"].AsString, value.ToInt32()));
                 break;
             case "updateEventCondClient":
                 using (JsonDocument json = JsonDocument.Parse(args["v"].AsString)) Require(player.EventTrigger.UpdateClientCondition(Int(args, "c"), json.RootElement));

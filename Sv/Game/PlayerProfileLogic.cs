@@ -6,7 +6,46 @@ namespace Sv.Game;
 
 public sealed class PlayerProfileLogic(Player player) : PlayerLogicBase(player)
 {
+    public static IReadOnlyList<int> CurrencyItemIds { get; } = [102, 89, 90];
+
     private PlayerProfileComp Comp => Player.SaveData.ProfileComp;
+
+    public int GetCurrency(int itemId) => itemId switch
+    {
+        102 => Money,
+        89 => Crystal,
+        90 => SummonCoin,
+        _ => throw new ArgumentOutOfRangeException(nameof(itemId), "当前支持金币 102、晶尘 89、欧泊 90；其他虚拟货币尚未实现"),
+    };
+
+    public void GrantCurrency(int itemId, int count)
+    {
+        if (count <= 0 || (long)GetCurrency(itemId) + count > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(count), "货币数量必须为正整数，且余额不能超过 2147483647");
+        switch (itemId)
+        {
+            case 102: AddMoney(count); break;
+            case 89: AddCrystal(count); break;
+            case 90: AddSummonCoin(count); break;
+        }
+    }
+
+    public void GrantAllCurrencies(int count)
+    {
+        if (count <= 0 || CurrencyItemIds.Any(id => (long)GetCurrency(id) + count > int.MaxValue))
+            throw new ArgumentOutOfRangeException(nameof(count), "货币数量无效或余额溢出，未发放任何货币");
+        foreach (int itemId in CurrencyItemIds) GrantCurrency(itemId, count);
+    }
+
+    public void SetPlayerName(string name, bool isNewName)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 8 || name.Any(char.IsControl))
+            throw new InvalidOperationException("名字须为 1 到 8 个字，且不能包含控制字符");
+        if (Player.WeekNum.Week != 0 || Player.WeekNum.Day != 0 || Player.EventTrigger.Find(1000) is null && Player.EventTrigger.Find(15) is null)
+            throw new InvalidOperationException("当前不在新手起名剧情中");
+        NickName = name;
+        Notify("setPlayerNameReply", new() { ["r"] = true, ["in"] = isNewName });
+    }
 
     public string NickName
     {
@@ -112,7 +151,7 @@ public sealed class PlayerProfileLogic(Player player) : PlayerLogicBase(player)
 
     public void AddCrystal(int amount)
     {
-        if ((long)Crystal + amount is < 0 or > int.MaxValue) throw new InvalidOperationException("晶钻数量无效");
+        if ((long)Crystal + amount is < 0 or > int.MaxValue) throw new InvalidOperationException("晶尘数量无效");
         Crystal += amount;
         Notify("updateCrystal", new() { ["v"] = Crystal, ["bv"] = 0 });
     }

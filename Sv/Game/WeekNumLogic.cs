@@ -180,7 +180,7 @@ public sealed class WeekNumLogic(Player player) : PlayerLogicBase(player)
         Player.Newbee.Reset();
         Player.Social.Reset();
         Player.Intelligence.Reset();
-        Player.HeroMgr.ResetStoryHeroes();
+        Player.HeroMgr.ResetStoryState();
         Player.City.Reset();
         Player.Status.Reset();
         Player.Rpc.Reset();

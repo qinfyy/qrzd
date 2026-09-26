@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Serilog;
 using Sv.Database;
@@ -194,12 +195,15 @@ public sealed class EventTriggerLogic(Player player) : PlayerLogicBase(player)
         return true;
     }
 
-    public bool TraceUi(string value)
+    public bool TraceUi(int value)
     {
+        // Naming acknowledges ui=1 inside the dialogue; only its later dialog trace completes the event.
+        if (value == 1 && (Find(1000) is not null || Find(15) is not null)) return true;
         EventProgress? progress = Comp.ProcessingEvents.FirstOrDefault(entry =>
-            GameTableCatalog.Instance.GetDataById<EventContentData>(entry.EventId)!.List("contentFinishUI").Any(ui => ui.GetString() == value));
+            GameTableCatalog.Instance.GetDataById<EventContentData>(entry.EventId)!.Ints("contentFinishUI").Contains(value));
         if (progress is null) return false;
-        if (!progress.Ui.Contains(value)) progress.Ui.Add(value);
+        string key = value.ToString(CultureInfo.InvariantCulture);
+        if (!progress.Ui.Contains(key)) progress.Ui.Add(key);
         MarkDirty();
         TryComplete(GameTableCatalog.Instance.GetDataById<EventContentData>(progress.EventId)!, progress);
         return true;
@@ -212,7 +216,7 @@ public sealed class EventTriggerLogic(Player player) : PlayerLogicBase(player)
             int[] required = MainlineTable.Elements(condition).Select(value => MainlineTable.Number(value)).ToArray();
             if (key == "dialog" && required.All(progress.Dialogs.Contains)) continue;
             if (key == "battle" && required.All(progress.Battles.Contains)) continue;
-            if (key == "ui" && MainlineTable.Elements(condition).All(value => progress.Ui.Contains(value.GetString()))) continue;
+            if (key == "ui" && required.All(value => progress.Ui.Contains(value.ToString(CultureInfo.InvariantCulture)))) continue;
             return;
         }
         if (CanComplete(row)) Complete(row, progress);
@@ -297,7 +301,8 @@ public sealed class EventTriggerLogic(Player player) : PlayerLogicBase(player)
             case 101:
                 int emergency = MainlineTable.Number(value, -1);
                 if (emergency is not (0 or 1)) return false;
-                if ((emergency == 1) != Player.Status.Emergency) return false;
+                // Every login visits the client's emergency scene, even after tutorial completion.
+                // A presentation-state report must not overwrite the authoritative story lock.
                 break;
             case 102:
                 int[] operations = value.ValueKind == JsonValueKind.Array ? value.EnumerateArray().Select(v => MainlineTable.Number(v)).ToArray() : [MainlineTable.Number(value)];

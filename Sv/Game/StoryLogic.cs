@@ -15,6 +15,12 @@ public sealed class StoryLogic(Player player) : PlayerLogicBase(player)
     public int GeneralValue => Comp.GeneralValue;
     public bool ClientEventFinished => Comp.ClientEventFinish;
 
+    protected internal override void OnLogin()
+    {
+        // The client has no default-scene branch for the legacy place value 0.
+        if (Comp.Place is not (1 or 2)) SetPlace(1);
+    }
+
     public Dictionary<string, object> ToSnapshot() => new()
     {
         ["rt"] = Route, ["ed"] = Comp.Endings.ToArray(), ["cf"] = Comp.ClickedRoutes.ToArray(), ["cef"] = Comp.ClientEventFinish,
@@ -31,7 +37,8 @@ public sealed class StoryLogic(Player player) : PlayerLogicBase(player)
 
     public bool SetPlace(int place)
     {
-        if (place is < 0 or > 2) return false;
+        if (place is not (1 or 2)) return false;
+        if (Comp.Place == place) return true;
         Comp.Place = place;
         MarkDirty();
         return true;
@@ -134,7 +141,7 @@ public sealed class StoryLogic(Player player) : PlayerLogicBase(player)
         Comp.CurrentCgs.Clear();
         Comp.ClickedRoutes.Clear();
         Comp.GeneralValue = 0;
-        Comp.Place = 0;
+        Comp.Place = 1;
         Comp.ClientEventFinish = true;
         MarkDirty();
     }

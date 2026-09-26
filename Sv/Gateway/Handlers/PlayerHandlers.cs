@@ -49,8 +49,6 @@ public sealed class PlayerHandlers
         if (session.AvatarEntityId is not null) session.SendPack(new MultiTeamOnLoginReplyPacket(session.AvatarEntityId));
     }
 
-    public void OnAddChatMsg(GatewaySession session, BsonDocument args) => session.Player?.Chat.Receive(session, args);
-
     public void OnLogout(GatewaySession session, BsonDocument args)
     {
         Logger.Information("Gateway {ConnectionId} 客户端请求登出 UID={UserId}", session.ConnectionId, session.Player?.Uid);

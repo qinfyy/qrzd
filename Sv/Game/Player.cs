@@ -172,6 +172,21 @@ public sealed class Player
             ["combat"] = Combat.ToSnapshot(),
             ["bs"] = EventTrigger.ToBattleSnapshot(),
             ["ldd"] = Newbee.ToSummonSnapshot(),
+            // The client requires an initial room and an active scheme even before housing is unlocked.
+            ["fnd"] = new Dictionary<string, object>
+            {
+                ["kns"] = new[] { "player_home" },
+                ["cst"] = "player_home",
+                ["s"] = new Dictionary<string, object>
+                {
+                    ["player_home"] = new Dictionary<string, object>
+                    {
+                        ["cur"] = "1",
+                        ["max"] = 1,
+                        ["1"] = new Dictionary<string, object> { ["t"] = "player_home", ["e"] = new Dictionary<string, object>() },
+                    },
+                },
+            },
             ["reward"] = new Dictionary<string, object>
             {
                 ["bc"] = City.Blackcores().Where(pair => pair.Value != 0).Select(pair => (object)new[] { pair.Key, pair.Value }).ToArray(),
@@ -189,6 +204,8 @@ public sealed class Player
                 ["cfs"] = new Dictionary<string, object>(),
             },
             ["sd"] = Social.ToSnapshot(),
+            ["cht"] = Chat.ToSnapshot(),
+            ["fri"] = Chat.ToFriendsSnapshot(),
             ["intelligence"] = Intelligence.ToSnapshot(),
         };
 
