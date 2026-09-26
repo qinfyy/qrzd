@@ -60,7 +60,14 @@ public static class ResourcesLoader
         // 顺序反序列化并触发各行 OnLoad
         LoadTable<HeroData>(HeroData.TableFileName);
         LoadTable<HeroStarSkillData>(HeroStarSkillData.TableFileName);
+        LoadTable<HeroStarData>(HeroStarData.TableFileName);
+        LoadTable<ArtifactLevelData>(ArtifactLevelData.TableFileName);
+        LoadTable<ArtifactAttrLevelData>(ArtifactAttrLevelData.TableFileName);
+        LoadTable<AwakeConsumeData>(AwakeConsumeData.TableFileName);
+        LoadTable<LiberateLvData>(LiberateLvData.TableFileName);
+        LoadTable<LiberateTupoData>(LiberateTupoData.TableFileName);
         LoadTable<ItemData>(ItemData.TableFileName);
+        LoadTable<HeroFragmentItemData>(HeroFragmentItemData.TableFileName);
         LoadTable<CityData>(CityData.TableFileName);
         LoadTable<CityBuildingData>(CityBuildingData.TableFileName);
         LoadTable<CityDevelopmentData>(CityDevelopmentData.TableFileName);

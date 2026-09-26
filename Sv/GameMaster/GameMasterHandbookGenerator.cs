@@ -24,7 +24,7 @@ public static class GameMasterHandbookGenerator
         builder.AppendLine("QRZD GM Handbook");
         builder.AppendLine("================");
         builder.AppendLine("游戏内打开终端好友，私聊 Server 发送 help 或命令（可省略 /）；默认作用于自己。");
-        builder.AppendLine("其他聊天频道支持 /命令、!命令、@allhero，命令与结果仅回显到 Server 私聊，不广播。");
+        builder.AppendLine("其他聊天频道支持 /命令 与 !命令，命令与结果仅回显到 Server 私聊，不广播。");
         builder.AppendLine("HTTP: GET /api/gm?content=/命令，目标通过 @uid 指定。");
         builder.AppendLine("HTTP 认证：GameMaster:ApiKey 为空时仅允许回环地址；配置后使用 Authorization: Bearer <key>。");
         builder.AppendLine();
@@ -64,6 +64,21 @@ public static class GameMasterHandbookGenerator
         builder.AppendLine("晶钻 80 是 yuanbao，当前未实现；crystal/89 是晶尘，不能混用。");
         builder.AppendLine();
 
+        // 神器使不进入背包，按 heroId 唯一持有，因此单列一节。
+        // 异界体标记决定星级上限（5/4 而非 4/4），是使用这份表时唯一需要区分的属性。
+        HeroData[] heroes = [.. GameTableCatalog.Instance.GetAllData<HeroData>().OrderBy(hero => hero.ProtoId)];
+        builder.Append("[hero] 神器使 ID 数量: ").AppendLine(heroes.Length.ToString());
+        builder.AppendLine("id\tname\t异界体\tGM");
+        foreach (HeroData hero in heroes)
+        {
+            builder.Append(hero.ProtoId).Append('\t').Append(hero.Name)
+                .Append('\t').Append(HeroMgrLogic.IsYijieti(hero.ProtoId) ? "是" : "否")
+                .Append("\tGM=/give hero ").Append(hero.ProtoId).AppendLine(" [@uid]");
+        }
+        builder.AppendLine();
+        builder.AppendLine("异界体星级上限 5/4，普通角色 4/4。养成直设用 /hero <id> [sl|so|art|aw|lib]。");
+        builder.AppendLine();
+
         HashSet<int> listed = [];
         foreach (string category in new[] { "treasure", "furniture", "xinwu", "common", "task", "gift" })
         {
@@ -82,4 +97,5 @@ public static class GameMasterHandbookGenerator
         foreach (ItemData item in GameTableCatalog.Instance.GetAllData<ItemData>().Where(item => item.Release && item.Type != 8 && !listed.Contains(item.Id)).OrderBy(item => item.Id))
             builder.Append(item.Id).Append('\t').Append(item.Name).Append("\ttype=").Append(item.Type).AppendLine("\t缺少客户端分类或完整影装配置，不参与批量发放");
     }
+
 }

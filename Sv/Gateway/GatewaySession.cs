@@ -122,7 +122,17 @@ public sealed class GatewaySession
         byte[] payload = message.ToByteArray();
         if (payload.Length + 2 > Config.Server.GatewayMaxFrameBytes)
         {
-            throw new InvalidDataException("发送帧过大");
+            // 单个推送包超限不应打断整条连接：记录后丢弃该包，其余回复照常送达。
+            // 抛出异常会连带丢弃同一批 replies（例如 Rest 的行动力同步），表现为功能静默失效。
+            string name = message is EntityMessage entity
+                ? GatewayRouter.GetRpcName(Convert.ToHexString(entity.Method.Md5.Span))
+                : message is EntityInfo info
+                    ? GatewayRouter.GetRpcName(Convert.ToHexString(info.Type.Md5.Span))
+                    : message.GetType().Name;
+            Log.ForContext<GatewaySession>().Error(
+                "推送包超限已丢弃 method={Method} bytes={Bytes} limit={Limit}",
+                name, payload.Length, Config.Server.GatewayMaxFrameBytes);
+            return false;
         }
 
         string rpcName;

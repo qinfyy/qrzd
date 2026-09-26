@@ -121,8 +121,7 @@ public sealed class ChatLogic(Player player) : PlayerLogicBase(player)
         BsonDocument info = args.TryGetValue("info", out BsonValue? infoValue) && infoValue.IsBsonDocument ? infoValue.AsBsonDocument : new BsonDocument();
         ObjectId targetId = channel == 3 ? ReadAvatarId(info, "ti") : ObjectId.Empty;
         bool serverTalk = channel == 3 && targetId.ToString() == ServerFriendId;
-        bool command = serverTalk || text.StartsWith('/') || text.StartsWith('!') ||
-            text.StartsWith("@allhero", StringComparison.OrdinalIgnoreCase) && (text.Length == 8 || char.IsWhiteSpace(text[8]));
+        bool command = serverTalk || text.StartsWith('/') || text.StartsWith('!');
 
         BsonDocument message;
         lock (Player.SyncRoot)

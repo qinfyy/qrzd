@@ -10,13 +10,15 @@ public static class StoryHandlers
     public static readonly HashSet<string> Methods = ["pullEvents", "reliableEcho", "startEvent", "startEventOption", "clientTraceProcessingEvent",
         "updateEventCondClient", "queryEventOptAsk", "statusSwitch", "statusCheck", "enterPlace", "tutorialBegin", "updateStoryClickFlag",
         "requestEnterStory", "clientAskTriggerNewbee", "clientFinishNewbee", "passInitPrologue", "checkProcessingEvent", "requestLuckyDrawFile",
-        "requestLuckyDrawCard", "requestFile", "requestQuitFile"];
+        "requestLuckyDrawCard", "requestFile", "requestQuitFile", "triggerExternalEvent"];
 
     public static void OnRequest(Player player, string method, BsonDocument args)
     {
         switch (method)
         {
             case "reliableEcho": break;
+            // 客户端引导（含深夜食堂 1046）主动上报外部事件，服务端只负责应答解锁 UI。
+            case "triggerExternalEvent": player.Notify("triggerExternalEventReply", new Dictionary<string, object>()); break;
             case "pullEvents":
                 player.EventTrigger.Refresh(false);
                 player.Notify("pullEventsReply", new() { ["a"] = player.EventTrigger.AvailableSnapshot(), ["p"] = player.EventTrigger.Processing });

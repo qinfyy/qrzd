@@ -64,6 +64,8 @@ message CityComp {
     repeated int32 hidden_buildings = 20;
     int32 center_confidence = 21;
     repeated int32 passed_stages = 22;
+    // 深夜食堂每日只能用餐一次，跨日由 CityLogic.NewDay 清零。
+    bool use_canteen = 23;
 }
 
 message AreaState {
@@ -108,6 +110,16 @@ message HeroMgrComp {
     repeated HeroState heroes = 1;
     map<int32, int32> banned_heroes = 2;
     repeated int32 cine_locked_heroes = 3;
+    // 影装实例池，对应管理器级别的影装库存。
+    repeated TreasureInstance treasures = 4;
+    // 皮肤实例池，供各角色按 UUID 引用。
+    repeated SkinInstance skins = 8;
+    // 好感锁定名单，对应 fl。
+    repeated int32 friendly_locked_heroes = 5;
+    // 尚未归属到已拥有神器使的皮肤暂存，对应 ps。
+    map<int32, string> pending_skins = 6;
+    // 尚未归属到已拥有神器使的挂饰暂存，对应 pp。
+    map<int32, string> pending_pendants = 7;
 }
 
 message HeroState {
@@ -116,6 +128,68 @@ message HeroState {
     int32 star_order = 3;
     int32 fatigue = 4;
     int32 friendly = 5;
+    // 是否已开启神器。满星后仍需一次 incHeroStarOrder 才能开启，不能在升星时自动打开。
+    bool open_artifact = 6;
+    // 神器等级，对应客户端 ar.o。
+    int32 artifact_level = 7;
+    // 神器增幅等级，对应 ar.il。
+    int32 artifact_inc_level = 8;
+    // 已分配的神器属性点，对应 ar.oa，键为属性名。
+    map<string, int32> artifact_attrs = 9;
+    // 觉醒阶段，对应 as。
+    int32 awake_stage = 10;
+    // 觉醒外观开关，对应 ass。
+    bool awake_skin_style = 11;
+    // 解放阶段，对应 ls。
+    int32 liberate_stage = 12;
+    // 解放各分支累计经验，对应 la/ld/lh。
+    map<string, int32> liberate_exp = 13;
+    // 影装 COST 上限，对应 ti.mc。会随养成增长，不能固定为 25。
+    int32 treasure_max_cost = 14;
+    // 已装备影装：UUID -> 来源 invId。
+    map<string, int32> equipped_treasures = 15;
+    // 持有的皮肤 UUID 列表，对应 sk。
+    repeated string skin_uuids = 16;
+    // 当前使用的皮肤 UUID，对应 cs。
+    string current_skin_uuid = 17;
+    // 挂饰：外层是槽位，内层是挂饰 UUID，对应 wpa。
+    repeated string pendant_uuids = 18;
+    // 羁绊影装引用，对应 jbt。
+    repeated string bond_treasure_uuids = 19;
+    // 本周已攻略，对应 cfd。
+    bool conquered_this_week = 20;
+    // 永久已攻略，对应 fd。
+    bool conquered = 21;
+    // 获得时间，对应 at。
+    int64 obtain_time = 22;
+}
+
+// 影装实例。同一件影装可被多个神器使引用，因此独立于 HeroState 保存，
+// 由 equipped_treasures 的 UUID 指向，避免复制出多份可独立升级的同一资产。
+message TreasureInstance {
+    string uuid = 1;
+    int32 item_id = 2;
+    int32 level = 3;
+    int32 star = 4;
+    int32 rarity = 5;
+    bool exclusive = 6;
+    int32 exclusive_stage = 7;
+    map<string, int32> attrs = 8;
+    int64 obtain_time = 9;
+}
+
+// 皮肤实例。客户端 HeroData.initFromDict 会把 sk 的每个值交给 SkinData.initFromDict，
+// 该方法要求 i(皮肤资源 ID) 与 u(UUID) 都存在，缺一个就会抛异常并中断整个登录流程，
+// 因此不能只存 UUID，必须连同皮肤 ID 一起持久化。
+message SkinInstance {
+    string uuid = 1;
+    int32 skin_id = 2;
+    int64 create_time = 3;
+    // 染色方案键值，键为染色位，值为配置 ID。
+    map<string, int32> cur_dye = 4;
+    map<string, int32> pending_dye = 5;
+    // 染色生效时间，对应 dst。
+    int64 dye_set_time = 6;
 }
 
 // 社交数据

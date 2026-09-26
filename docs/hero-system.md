@@ -2,7 +2,7 @@
 
 研究日期: 2026-09-26。范围为当前客户端反编译脚本与本地 Sv 工程的静态对照。
 
-本文区分客户端已确认行为、当前 Sv 实现和后续实现建议。客户端代码不能证明官方服务端采用了什么数据库或内部类结构。初次研究没有修改业务代码或玩家存档；后续按永久角色规则修正了 GM 主线重置，见第 7 节。
+本文区分客户端已确认行为、当前 Sv 实现和后续实现建议。客户端代码不能证明官方服务端采用了什么数据库或内部类结构。初次研究没有修改业务代码或玩家存档；后续按永久角色规则修正了 GM 主线重置，见第 8 节。剧情临时角色与永久持有的边界见第 7 节。
 
 ## 1. 核心结论
 
@@ -10,6 +10,7 @@
 - 常规拥有角色的等级直接取账号等级。星级、神器、觉醒、解放是不同的成长维度，不能合并成一个角色等级。
 - 神器使本体、神器养成、影装实例、皮肤实例是不同对象。影装与皮肤使用 UUID，不意味着神器使也应使用 UUID。
 - 客户端同时维护可用与禁用神器使。剧情禁用不会删除所有权或重建养成数据；剧情锁定又是独立名单。
+- 剧情与试玩角色不是独立实体。它们的来源是关卡配置，随战斗数据下发，从不进入玩家存档。
 - 当前 Sv 只持久化五个神器使本体字段，尚不是完整养成系统。登录能显示角色，不代表神器、装备、觉醒等已经实现。
 
 入口: [ClientAvatar.py:214](D:/f7/Reverse/Script/py/entity/ClientAvatar.py:214)、[HeroMgrData.py:1067](D:/f7/Reverse/Script/py/entity/avatar_attrs/HeroMgrData.py:1067)、[HeroMgrData.py:484](D:/f7/Reverse/Script/py/entity/avatar_attrs/HeroMgrData.py:484)。
@@ -136,14 +137,82 @@
 
 依据: [InvMember.py:30](D:/f7/Reverse/Script/py/entity/avatar_members/InvMember.py:30)、[HeroMgrMember.py:972](D:/f7/Reverse/Script/py/entity/avatar_members/HeroMgrMember.py:972)、[HeroMgrMember.py:1024](D:/f7/Reverse/Script/py/entity/avatar_members/HeroMgrMember.py:1024)、[SkinData.py:65](D:/f7/Reverse/Script/py/com/utils/SkinData.py:65)、[HeroMgrData.py:611](D:/f7/Reverse/Script/py/entity/avatar_attrs/HeroMgrData.py:611)、[HeroMgrData.py:800](D:/f7/Reverse/Script/py/entity/avatar_attrs/HeroMgrData.py:800)。
 
-## 7. 当前 Sv 的实际实现
+## 7. 剧情临时角色与永久持有的边界
+
+客户端不存在“试用角色”这一独立实体。剧情里能用的非玩家持有角色，是关卡配置直接指定的英雄 ID 列表，战斗时随战斗数据一起下发，根本不进入 `heroMgrData`。确认依据如下。
+
+### 7.1 上阵名单来自关卡配置
+
+`mission` 配置表的 `defaultHeroes` 和 `target_hero` 两个字段决定了哪些英雄能上阵，不要求玩家持有:
+
+```python
+defaultHeroes = MissionDataMod.data[sceneId].get('defaultHeroes')
+if defaultHeroes:
+    heroes = defaultHeroes[:]          # 直接用配置名单，覆盖玩家选择
+```
+
+主线与区域剧情关卡走 `system_type in MissionMode.CINE_SET`（即 `AREA_MISSION=1` 与 `MAIN_MISSION=2`），该分支会放宽持有校验:
+
+```python
+if missionMode in const.MissionMode.CINE_SET:
+    if sceneId in const.DAERWEILA_SCENE_SET_2:      # 357-363
+        target_hero = data.get('target_hero', ())
+        heroes = [i for i in heroes if self.heroMgrData.getHero(i, withBan=False) or i in target_hero]
+    elif sceneId in const.COC_HERO_LIMIT_SCENE:     # 482-488
+        target_hero = data.get('target_hero', ())
+        heroes = list(target_hero)                 # 完全替换为配置名单
+    else:
+        heroes = [i for i in heroes if self.heroMgrData.getHero(i, withBan=False)]
+```
+
+剧情事件战斗（`BattleType.EVENT`）在 `QIANSHI_SCENE_SET`（401006、401009-401012）有同样分支。`COC_HERO_LIMIT_SCENE` 更极端: 队伍被整个替换为 `target_hero`，玩家选人完全无效。
+
+依据: [BattleStageMember.py:99](D:/f7/Reverse/Script/py/entity/avatar_members/BattleStageMember.py:99)、[BattleStageMember.py:152](D:/f7/Reverse/Script/py/entity/avatar_members/BattleStageMember.py:152)、[const.py:2084](D:/f7/Reverse/Script/py/com/const.py:2084)、[const.py:1961](D:/f7/Reverse/Script/py/com/const.py:1961)。
+
+### 7.2 未持有时客户端读取的是默认值
+
+战斗结算要读取每个上阵英雄的皮肤、神器、觉醒、挂饰。这些 getter 对未持有的英雄全部返回兜底值，不报错也不建对象:
+
+| 方法 | 未持有时返回 |
+| --- | --- |
+| `getHeroSkinData` | `SkinData.getFakePersistentDict(heroId)`，伪造 UUID 的临时皮肤 |
+| `getArtifactInfo` | `(False, 0)`，视为未开启神器 |
+| `getAwakeStage` | `0` |
+| `getPendantInfo` | `[]` |
+
+`getFakePersistentDict` 只填 `{i, u, cd, pd, dn}`，其中 `u` 是当场 `IdManager.genid()` 生成的临时 UUID。这正说明皮肤、影装、觉醒都属于“持有”这一事实，剧情角色不进入玩家的养成对象。
+
+依据: [HeroMgrData.py:1286](D:/f7/Reverse/Script/py/entity/avatar_attrs/HeroMgrData.py:1286)、[HeroMgrData.py:1330](D:/f7/Reverse/Script/py/entity/avatar_attrs/HeroMgrData.py:1330)、[HeroMgrData.py:1339](D:/f7/Reverse/Script/py/entity/avatar_attrs/HeroMgrData.py:1339)、[HeroMgrData.py:1349](D:/f7/Reverse/Script/py/entity/avatar_attrs/HeroMgrData.py:1349)、[SkinData.py:91](D:/f7/Reverse/Script/py/com/utils/SkinData.py:91)。
+
+### 7.3 剧情角色的属性来自关卡表
+
+剧情角色的战斗数值由 `mission_hero_attr` 配置提供，按 `(sceneId, heroId)` 二级键索引，字段包含 `skin_id` 与 `awake`。这张表同时被战斗选择界面和战斗结算读取，说明它是关卡侧数据，与玩家存档无关。
+
+`PVE_FANTASY`（脑洞）战斗走更彻底的隔离: 神器、觉醒、挂饰全部强制置为 `False/0/[]`，皮肤一律用伪造数据。
+
+依据: [mission_hero_attr.py](D:/f7/Reverse/Script/py/com/data/cdata/mission_hero_attr.py)、[CombatMember.py:327](D:/f7/Reverse/Script/py/entity/avatar_members/CombatMember.py:327)、[CombatMember.py:345](D:/f7/Reverse/Script/py/entity/avatar_members/CombatMember.py:345)、[city_choose_hero.py:139](D:/f7/Reverse/Script/py/game_scene/city_choose_hero.py:139)。
+
+### 7.4 抽卡试玩是另一条路径
+
+`HeroBuyPreviewMember` 的 `requestTryPlayBattle` 是抽卡预览试玩，走 `combatOfflineRequest(BattleType.HUODONG, scene_id, [hero_id], ...)`。它同样只是把 `hero_id` 放进本次战斗的 `heroes` 列表，不写 `heroMgrData`，战斗结束只记录 `hero_rewards_done[hero_id] = danchi_id`。这条路径与剧情试用共用同一个结论: 试玩不产生持有关系。
+
+依据: [HeroBuyPreviewMember.py:25](D:/f7/Reverse/Script/py/entity/avatar_members/ActivityMembers/HeroBuyPreviewMember.py:25)、[HeroBuyPreviewMember.py:35](D:/f7/Reverse/Script/py/entity/avatar_members/ActivityMembers/HeroBuyPreviewMember.py:35)。
+
+### 7.5 对服务端的约束
+
+1. **不要为剧情角色建存档。** 剧情与试玩英雄的来源是关卡配置和服务端下发的战斗数据，不进 `HeroState`，不占神器使列表，重登也不会恢复。
+2. **重置可以放心清剧情状态。** 之前把 `ResetStoryHeroes` 改为 `ResetStoryState`、让 `/clear` 与 `/resetweek` 保留全部已获得神器使的决定是正确的，不需要为“可能被误删的试用角色”额外补救——因为试用角色从未被存档。
+3. **战斗校验要区分来源。** 服务端校验上阵名单时，主线与区域关卡必须放行配置表里的 `defaultHeroes` / `target_hero`，不能只查玩家是否持有；否则剧情关卡直接无法开始。
+4. **剧情角色的养成数据一律取关卡表。** 战斗构建时按 `(sceneId, heroId)` 查 `mission_hero_attr`，查不到再回退到玩家养成数据，与客户端的兜底行为保持一致。
+
+## 8. 当前 Sv 的实际实现
 
 持久化路径是 `Player.SaveData.HeroMgrComp -> PlayerSaveData Protobuf -> Players.Data SQLite BLOB`。不需要另建神器使关系表，也不应照搬 bh2 装备实例的角色模型。
 
 | 部分 | 当前状态 |
 | --- | --- |
 | 所有权 | `HeroMgrComp.heroes` 保存 `HeroState`，按 `heroId` 查找和去重 |
-| 已存字段 | `HeroId`、`StarLevel`、`StarOrder`、`Fatigue`、`Friendly` |
+| 已存字段 | 本体五项 + 神器开关/等级/增幅/加点、觉醒、解放、影装引用、皮肤、挂饰、羁绊、攻略状态、获得时间 |
 | 剧情状态 | 管理器保存禁用原因和剧情锁定名单；已有禁用/恢复 RPC |
 | 解锁 | `Unlock` 校验资源 ID，当前统一创建 `1/1`；尚未按获取来源完整区分初始养成 |
 | 登录快照 | `ar` 固定初始等级/属性，`ti` 固定 COST 25 和空装备，`cat=null` |
@@ -156,15 +225,15 @@
 
 依据: [ServerProto.proto:106](D:/f7/Sv/Database/ServerProto.proto:106)、[HeroMgrLogic.cs:62](D:/f7/Sv/Game/HeroMgrLogic.cs:62)、[PlayerPackets.cs:133](D:/f7/Sv/Gateway/Packets/PlayerPackets.cs:133)、[PlayerHandlers.cs:26](D:/f7/Sv/Gateway/Handlers/PlayerHandlers.cs:26)、[CombatLogic.cs:90](D:/f7/Sv/Game/CombatLogic.cs:90)、[GameDatabase.cs:116](D:/f7/Sv/Database/GameDatabase.cs:116)。
 
-2026-09-26 重置修正: 玩家获得的神器使属于永久资产，不能随周目或主线重置删除。原实现的 `ResetStoryHeroes` 曾清空角色集合，现已改为 `ResetStoryState`。GM `/clear` 与 `/resetweek` 保留所有已获得神器使和既有星级，仅将疲劳恢复到资源表上限、好感归零，并清除剧情禁用与锁定。后续新增养成字段也应保留在原角色对象上，不能通过重建默认角色覆盖。
+2026-09-26 重置修正: 玩家获得的神器使属于永久资产，不能随周目或主线重置删除。原实现的 `ResetStoryHeroes` 曾清空角色集合，现已改为 `ResetStoryState`。GM `/clear` 与 `/resetweek` 保留所有已获得神器使和全部养成字段，仅重置周期状态: 疲劳恢复到资源表上限、好感归零、本周攻略清空，并清除剧情禁用与锁定。养成数据一律保留在原角色对象上，不通过重建默认角色覆盖。
 
 GM 获取方法: 游戏内发送 `/hero <id>` 解锁指定神器使，`/allhero` 补齐全部。HTTP 或控制台使用 `/hero <id> @<玩家UID>`、`/allhero @<玩家UID>` 指定玩家；已有角色不会重新创建或覆盖养成。
 
 依据: [CityCommands.cs:68](D:/f7/Sv/GameMaster/CityCommands.cs:68)、[WeekNumLogic.cs:174](D:/f7/Sv/Game/WeekNumLogic.cs:174)、[HeroMgrLogic.cs:54](D:/f7/Sv/Game/HeroMgrLogic.cs:54)。
 
-## 8. 服务端实现建议
+## 9. 服务端实现建议
 
-以下是后续落地顺序，不是本轮已经实现的功能。
+以下是后续落地顺序。2026-09-26 已完成第 1 步与第 2 步的基础成长闭环，其余仍待实现。
 
 1. 扩充现有 Protobuf 存档中的 `HeroState` 与管理器字段，兼容旧存档。保存实际养成、外观和穿戴引用；职业、基础属性、技能配置继续从资源表取得。
 2. 在 `HeroMgrLogic` 内集中处理拥有、禁用、开启神器、升星、神器升级、解放与觉醒规则。先补齐基础成长闭环，再接外观、洗炼和回退等功能。
@@ -174,7 +243,26 @@ GM 获取方法: 游戏内发送 `/hero <id>` 解锁指定神器使，`/allhero`
 6. 从同一组资源与存档状态生成登录快照、养成回复、战力与战斗数据，避免“面板成长了，进战斗还是旧数值”。
 7. 将账号长期养成与本周剧情、疲劳、好感等周期状态分开制定重置规则。当前 GM 重置已经保留神器使和既有养成；未来正常跨周仍应保留永久角色，其他周期字段的规则需继续沿剧情/周目协议确认。
 
-重复获取相关参考: [LuckyDrawData.py:1219](D:/f7/Reverse/Script/py/entity/avatar_attrs/LuckyDrawData.py:1219)。
+重复获取相关参考: [LuckyDrawData.py:1219](D:/f7/Reverse/Script/py/entity/avatar_attrs/LuckyDrawData.py:1219)。第 7 节的边界结论已并入第 1 条: 剧情与试玩角色不进存档，重置只需处理剧情状态。
+
+## 10. 2026-09-26 已实现
+
+存档扩充（`ServerProto.proto`）: `HeroState` 新增神器开关、等级、增幅、属性点、觉醒、解放、影装 COST、装备引用、皮肤、挂饰、羁绊与攻略状态；新增 `TreasureInstance` 保存影装实例，使同一 UUID 可被多角色引用而不复制资产；`HeroMgrComp` 新增影装池、好感锁与外观暂存。proto3 新增字段向后兼容，旧存档可直接读取，缺失字段取默认值。
+
+新增资源表: `HeroStarData`（升星碎片消耗）、`ArtifactLevelData`（神器升级消耗）、`ArtifactAttrLevelData`（每级属性点）、`AwakeConsumeData`（觉醒材料与神器等级门槛）、`LiberateLvData`（解放属性）、`HeroFragmentItemData`（heroId 到碎片物品 ID 的索引）。启动日志确认全部加载成功。
+
+`HeroMgrLogic` 改动:
+
+1. `ToSnapshot` 改为输出真实养成状态，字段集合与客户端 `initFromDict` 对齐，不再固定 `ar.o=1`、`ti.mc=25` 与空装备。
+2. `IncStarOrder` 补齐碎片扣除、异界体 5/4 上限分支，以及满星后开启神器的路径；通过 `out` 返回 `artifact` 标志供回复包使用。
+3. 新增 `IncArtifactLevel` 与 `UpgradeAwakeStage`，按资源表校验等级门槛并经 `InventoryLogic` 扣材料。
+4. 移除了 `cost` 必须为空且 `fkt=0` 的解析限制，改为解析后由服务端按资源表校验。
+5. `ResetStoryState` 明确只重置周期状态，养成字段全部保留。
+
+两处需要留意的实现事实:
+
+- `hero.json` 不含 `fragment` 与 `yijieti` 字段，碎片 ID 与异界体判定改由 `fragment_item` 表反查（`heroid` 严格一对一，138 行）。
+- 客户端在 `artifact=false` 时会自行调用 `incStarOrder()`，因此服务端只推进存档并在回复里带 `artifact` 标志，不再下发已自增的完整快照。
 
 ## 验证边界
 

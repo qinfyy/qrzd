@@ -7,7 +7,7 @@ namespace Sv.Gateway.Handlers;
 public static class CityHandlers
 {
     public static readonly HashSet<string> Methods = ["getAllAreaInfoRequest", "getAreaInfoRequest", "getAreaStagesRequest", "areaBuildRequest", "areaLevelUpRequest",
-        "enterPatrolRequest", "patrolReward", "playerDestroyBuilding", "zhaiRequest", "incDayWhenNoActionVal", "clearCurDailySettlement"];
+        "enterPatrolRequest", "patrolReward", "playerDestroyBuilding", "zhaiRequest", "canteenRequest", "incDayWhenNoActionVal", "clearCurDailySettlement"];
 
     public static void OnRequest(Player player, string method, BsonDocument args)
     {
@@ -34,6 +34,11 @@ public static class CityHandlers
                 var reward = player.City.Rest() ?? throw new InvalidOperationException("当前不能休息");
                 player.City.Synchronize();
                 player.Notify("zhaiReply", new() { ["rs"] = true, ["reward"] = reward });
+                break;
+            case "canteenRequest":
+                player.City.Canteen(Ints(args, "h"), out string? canteenError);
+                Require(canteenError is null, canteenError ?? "深夜食堂不可用");
+                player.City.Synchronize();
                 break;
             case "incDayWhenNoActionVal":
                 if (!player.WeekNum.Advance()) player.WeekNum.ReplaySettlement();

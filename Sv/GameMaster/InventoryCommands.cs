@@ -8,11 +8,12 @@ using Sv.Resources.Tables;
 
 namespace Sv.GameMaster;
 
-public static class InventoryCommands
+public static class GiveCommands
 {
     private static readonly string[] CategoryNotes =
     [
         "分类来自客户端 ItemType：common 普通物品、task 任务物品、treasure 影装、gift 礼物/自选碎片/宠物兑换物、furniture 家具、xinwu 信物、fragment 神器使碎片。",
+        "hero 是神器使分类，按 heroId 唯一持有，不进入背包：give hero <id> 解锁一名，giveall hero 补齐全部。神器使不接受数量与 lv/cl 参数。",
         "背包分页：ui1 贵重物品、ui2 兑换货币、ui3 活动道具、ui4 强化材料、ui5 影装材料、ui6 房间道具、ui7 染色材料、ui12 其它。分页只筛选真实背包物品。",
         "currency 仅支持金币 102、晶尘 89、欧泊 90，增加真实余额；晶钻 80、皮肤、挂饰、徽章、称号等其他虚拟资产尚未实现，不会作为普通物品入包。",
         "lv<等级> 为 1..100，cl<品质> 为 1..5，只用于新发放的影装；默认均为 1，不修改已有影装。",
@@ -21,7 +22,7 @@ public static class InventoryCommands
     public static GameMasterCommand Give { get; } = new(
         "give",
         ["g"],
-        "按客户端物品 ID 发放指定物品或已支持的货币。",
+        "按客户端物品 ID 发放指定物品、神器使或已支持的货币。",
         ["/give <id> [x数量] [lv等级] [cl品质] [@uid]", "/give <分类> <id> [x数量] [lv等级] [cl品质] [@uid]"],
         [
             "数量默认 1，也接受裸数字或 *数量；仅接受显式 ID，批量发放使用 giveall。旧 item 命令已更名。",
@@ -35,7 +36,7 @@ public static class InventoryCommands
         "giveall",
         ["ga"],
         "按客户端分类补齐收藏或批量增加道具。",
-        ["/giveall [all|treasure|furniture|xinwu] [lv等级] [cl品质] [@uid]", "/giveall <common|task|gift|fragment|ui编号|currency> x数量 [@uid]"],
+        ["/giveall [all|treasure|furniture|xinwu|hero] [lv等级] [cl品质] [@uid]", "/giveall <common|task|gift|fragment|ui编号|currency> x数量 [@uid]"],
         [
             "分类省略按 all：仅补齐影装、家具、信物，每个未拥有的物品 ID 发 1 件；重复执行不重复发放，不接受数量。",
             "普通物品/分页/currency 分类必须指定数量，按数量累加；不会跳过已拥有的道具，也不会隐式发放货币。",
@@ -61,6 +62,20 @@ public static class InventoryCommands
         int itemId = ctx.RequirePositiveInt(idIndex, "/give [分类] <id> [x数量]");
         ParseModifiers(ctx, idIndex + 1, out int? amount, out int? level, out int? treasureClass);
         int count = amount ?? 1;
+
+        // 神器使不是背包物品，必须在按 ItemData 查表之前分流。
+        if (category == "hero")
+        {
+            if (amount is not null) throw new GameMasterCommandException("give hero 不接受数量参数；一名神器使只能存在一份");
+            if (level is not null || treasureClass is not null) throw new GameMasterCommandException("神器使不接受 lv 和 cl 参数");
+            if (!GameTableCatalog.Instance.TryGetDataById<HeroData>(itemId, out HeroData? heroRow))
+                throw new GameMasterCommandException($"神器使 ID {itemId} 不存在");
+            ExecuteWithSync(ctx, target => target.HeroMgr.Unlock(itemId)
+                ? $"已解锁神器使 {heroRow.Name}({itemId})"
+                : $"神器使 {heroRow.Name}({itemId}) 已解锁，本次无变化");
+            return;
+        }
+
         ItemData data = GameTableCatalog.Instance.GetDataById<ItemData>(itemId) ?? throw new GameMasterCommandException($"道具 ID {itemId} 不存在");
         bool currency = data.Type == 8 && PlayerProfileLogic.CurrencyItemIds.Contains(itemId);
         if (category == "currency" && !currency || category is not (null or "currency") && (!data.IsStoredInInventory || !InventoryLogic.MatchesCategory(data, category)))
@@ -95,9 +110,17 @@ public static class InventoryCommands
         if (category is not ("all" or "treasure") && (level is not null || treasureClass is not null))
             throw new GameMasterCommandException("只有 all 和 treasure 分类接受影装参数");
         if (category == "currency" && count is null) throw new GameMasterCommandException("giveall currency 必须指定数量，例如 x100");
+        if (category == "hero" && count is not null) throw new GameMasterCommandException("giveall hero 不接受数量参数；未拥有的神器使会各补 1 名");
 
         ExecuteWithSync(ctx, target =>
         {
+            if (category == "hero")
+            {
+                int addedHero = target.HeroMgr.UnlockAll();
+                return addedHero > 0
+                    ? $"已补齐全部神器使，新增 {addedHero} 名；已有神器使及养成未改动"
+                    : "全部神器使均已解锁，本次无变化";
+            }
             if (category == "currency")
             {
                 target.Profile.GrantAllCurrencies(count!.Value);
@@ -112,8 +135,8 @@ public static class InventoryCommands
 
     private static void RequireCategory(string category)
     {
-        if (category != "currency" && !InventoryLogic.GrantCategories.Contains(category))
-            throw new GameMasterCommandException($"未知分类 {category}；支持 {string.Join(", ", InventoryLogic.GrantCategories)}, currency");
+        if (category is not ("currency" or "hero") && !InventoryLogic.GrantCategories.Contains(category))
+            throw new GameMasterCommandException($"未知分类 {category}；支持 hero, {string.Join(", ", InventoryLogic.GrantCategories)}, currency");
     }
 
     private static void ParseModifiers(CommandContext ctx, int start, out int? amount, out int? level, out int? treasureClass)

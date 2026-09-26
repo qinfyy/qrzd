@@ -14,13 +14,13 @@ public static class GameMasterCommandRegistry
 {
     public static IReadOnlyList<GameMasterCommand> Commands { get; } =
     [
-        HeroCommands.Unlock,
-        HeroCommands.UnlockAll,
         CityCommands.Action,
-        InventoryCommands.Give,
-        InventoryCommands.GiveAll,
+        GiveCommands.Give,
+        GiveCommands.GiveAll,
+        HeroCommands.SetHero,
         CurrencyCommands.Gold,
         CurrencyCommands.Money,
+        LevelCommands.Level,
         CityCommands.Clear,
         CityCommands.ResetWeek,
         CityCommands.Status,

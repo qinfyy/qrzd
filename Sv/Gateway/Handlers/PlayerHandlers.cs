@@ -28,9 +28,12 @@ public sealed class PlayerHandlers
         if (session.AvatarEntityId is null || session.Player is null) return;
         lock (session.Player.SyncRoot)
         {
-            bool upgraded = request is not null && session.Player.HeroMgr.IncStarOrder(request.HeroId);
+            bool openedArtifact = false;
+            bool upgraded = request is not null && session.Player.HeroMgr.IncStarOrder(request.HeroId, out openedArtifact);
             session.Player.Save();
-            session.SendPack(new HeroStarOrderReplyPacket(session.AvatarEntityId, upgraded ? request!.HeroId : -1));
+            // 失败回 h=-1;成功时回真实 heroId,并带上 artifact 告诉客户端这是升星还是开启神器。
+            // 客户端在 artifact=false 时会自行 incStarOrder(),所以不能同时下发已自增的快照。
+            session.SendPack(new HeroStarOrderReplyPacket(session.AvatarEntityId, upgraded ? request!.HeroId : -1, upgraded && openedArtifact));
         }
     }
 

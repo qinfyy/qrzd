@@ -44,10 +44,24 @@ public static class CityCommands
         {
             ctx.SendMessage($"UID={target.Uid} 内部周目={target.WeekNum.Week} 显示周目={target.WeekNum.Week + 1} day={target.WeekNum.Day} route={target.Story.Route}");
             ctx.SendMessage($"状态={target.Status.CurrentStatus} emergency={target.Status.Emergency} 行动力={target.City.ActionVal} 跨日检查={target.WeekNum.CanAdvance()}");
+            ctx.SendMessage($"行动阻塞={target.City.ActionBlocker(0) ?? "无"}（endedActions={target.City.EndedActions}）");
+            ctx.SendMessage($"战斗实例={target.Combat.Active?.State.ToString() ?? "无"} IsActive={target.Combat.IsActive}");
             ctx.SendMessage($"进行中事件: {string.Join(',', target.EventTrigger.Processing)}; 可用事件: {string.Join(',', target.EventTrigger.Available().Select(row => row.Id))}");
             ctx.SendMessage($"战斗={target.Combat.Active?.Stage ?? 0} 结局={target.WeekNum.EndingId} 已完成事件={target.EventTrigger.Completed.Count}");
             if (ctx.Args.Count == 1) ctx.SendMessages(target.EventTrigger.BlockingConditions(ctx.RequireNonNegativeInt(0, "/citystatus [事件ID]")));
+            ctx.SendMessage(DescribeStages(target));
         }
+    }
+
+    /// <summary>
+    /// 列出每个区域的当前关卡与已通关进度。战斗入场要求区域 CurrentStage 与请求关卡一致，
+    /// 卡住时需要一眼看出区域推进到哪一关，否则只能反复试。
+    /// </summary>
+    private static string DescribeStages(Player target)
+    {
+        var areas = target.City.StageSummary()
+            .Select(area => $"区域{area.Id}[{area.StatusName}] 当前关卡={area.CurrentStage} 已通关={area.Passed}/{area.Total}");
+        return "区域进度: " + string.Join(" | ", areas);
     }
 
     private static void ExecuteAction(CommandContext ctx)

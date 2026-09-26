@@ -79,7 +79,7 @@ public sealed class PullEventsReplyPacket(ByteString avatarEntityId, int cbid = 
     }
 }
 
-public sealed class HeroStarOrderReplyPacket(ByteString avatarEntityId, int heroId) : BasePacket
+public sealed class HeroStarOrderReplyPacket(ByteString avatarEntityId, int heroId, bool artifact) : BasePacket
 {
     public override ushort Method => 5;
 
@@ -87,7 +87,7 @@ public sealed class HeroStarOrderReplyPacket(ByteString avatarEntityId, int hero
     {
         Id = avatarEntityId,
         Method = AeadTool.EncodeMethodName("incHeroStarOrder"),
-        Parameters = ByteString.CopyFrom(new BsonDocument { ["h"] = heroId, ["artifact"] = false }.ToBson()),
+        Parameters = ByteString.CopyFrom(new BsonDocument { ["h"] = heroId, ["artifact"] = artifact }.ToBson()),
     };
 }
 
@@ -134,16 +134,38 @@ public sealed class HeroStarOrderRequestPacket
 {
     public int HeroId { get; init; }
 
+    /// <summary>客户端声明要消耗的影装 UUID 列表，仅作为请求内容，服务端不直接信任。</summary>
+    public IReadOnlyList<string> Cost { get; init; } = [];
+
+    /// <summary>替代材料物品 ID，由客户端指定；实际扣除仍以服务端资源表为准。</summary>
+    public int FakeTreasure { get; init; }
+
     public static HeroStarOrderRequestPacket? FromBson(BsonDocument args)
     {
-        if (!args.TryGetValue("h", out BsonValue? heroId) || !heroId.IsInt32 ||
-            !args.TryGetValue("cost", out BsonValue? cost) || !cost.IsBsonArray || cost.AsBsonArray.Count != 0 ||
-            !args.TryGetValue("fkt", out BsonValue? fakeTreasure) || !fakeTreasure.IsInt32 || fakeTreasure.AsInt32 != 0)
+        if (!args.TryGetValue("h", out BsonValue? heroId) || !heroId.IsInt32)
         {
             return null;
         }
 
-        return new HeroStarOrderRequestPacket { HeroId = heroId.AsInt32 };
+        // cost 是影装 UUID 字符串列表，fkt 是替代材料 ID。两者都允许为空(碎片直升)，
+        // 但不能因为非空就拒绝请求——真实升星会带上材料，校验责任在服务端逻辑层。
+        var cost = new List<string>();
+        if (args.TryGetValue("cost", out BsonValue? costValue) && costValue.IsBsonArray)
+        {
+            foreach (BsonValue entry in costValue.AsBsonArray)
+            {
+                if (entry.IsString) cost.Add(entry.AsString);
+            }
+        }
+
+        int fakeTreasure = args.TryGetValue("fkt", out BsonValue? fkt) && fkt.IsInt32 ? fkt.AsInt32 : 0;
+
+        return new HeroStarOrderRequestPacket
+        {
+            HeroId = heroId.AsInt32,
+            Cost = cost,
+            FakeTreasure = fakeTreasure,
+        };
     }
 }
 

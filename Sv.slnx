@@ -1,4 +1,3 @@
 <Solution>
   <Project Path="Sv/Sv.csproj" />
-  <Project Path="Sv.Tests/Sv.Tests.csproj" />
 </Solution>

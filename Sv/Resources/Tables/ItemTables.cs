@@ -100,3 +100,28 @@ public sealed class ItemData : TableBase
         }
     }
 }
+
+/// <summary>
+/// 角色碎片道具，按 heroId 索引。升星与神器升级都要按角色扣碎片，
+/// heroId -> 碎片物品 ID 在资源里是严格一对一的（fragment_item 表无重复 heroid），
+/// 因此单独建索引表，避免每次养成操作都全表扫描。
+/// </summary>
+public sealed class HeroFragmentItemData : TableBase
+{
+    public const string TableFileName = "fragment_item.json";
+
+    [JsonPropertyName("id")]
+    public int ItemId { get; set; }
+
+    [JsonPropertyName("heroid")]
+    public int HeroId { get; set; }
+
+    /// <summary>是否为异界体专用碎片，对应客户端 YIJIETI_HERO_FRAGMENT 类型。</summary>
+    [JsonPropertyName("type")]
+    public int Type { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    public override int GetId() => HeroId;
+}

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Sv.Database;
 using Sv.Resources;
 using Sv.Resources.Tables;
@@ -24,7 +25,17 @@ public sealed class CityLogic(Player player) : PlayerLogicBase(player)
     public int CenterConfidence => Comp.CenterConfidence;
     public bool EndedActions => Comp.EndedActions;
     public bool NewbeePatrolComplete => Comp.NewbeePatrolComplete;
+    public bool UseCanteen => Comp.UseCanteen;
     public IReadOnlyList<int> PassedStages => Comp.PassedStages;
+
+    /// <summary>区域推进摘要，供 GM 诊断战斗入场与关卡进度使用。</summary>
+    public IReadOnlyList<(int Id, string StatusName, int CurrentStage, int Passed, int Total)> StageSummary() =>
+        Comp.Areas.OrderBy(area => area.Id).Select(area =>
+        {
+            string name = area.Status switch { 0 => "未解放", 1 => "可战斗", 2 => "已解放", _ => $"状态{area.Status}" };
+            if (area.Lock) name += "/已锁";
+            return (area.Id, name, area.CurrentStage, area.StageIds.Count(id => Comp.PassedStages.Contains(id)), area.StageIds.Count);
+        }).ToArray();
     public AreaState? FindArea(int id) => Comp.Areas.FirstOrDefault(area => area.Id == id);
     public Dictionary<int, int> AreaLevels() => Comp.Areas.ToDictionary(area => area.Id, area => area.Level);
     public Dictionary<int, int[]> AreaBuildings() => Comp.Areas.ToDictionary(area => area.Id, area => area.Buildings.Select(value => value.BuildingId).ToArray());
@@ -140,7 +151,7 @@ public sealed class CityLogic(Player player) : PlayerLogicBase(player)
         ["dv"] = DevelopVal, ["dvc"] = DevelopValCount, ["av"] = ActionVal, ["pv"] = 240, ["lpc"] = Player.Profile.CreateTime,
         ["bf"] = BuildFund, ["fv"] = ForceVal, ["ev"] = EventVal, ["rv"] = ResearchVal, ["pn"] = PatrolNum, ["cc"] = CenterConfidence,
         ["tpn"] = Comp.TotalPatrols, ["tvn"] = Comp.TotalDevelops, ["tbn"] = Comp.TotalBuilds, ["nbb"] = !Player.Newbee.IsFinished(40),
-        ["acr"] = Array.Empty<object>(), ["uc"] = false, ["rbn"] = 0, ["hb"] = Comp.HiddenBuildings.ToArray(), ["areas"] = ToAreasSnapshot(),
+        ["acr"] = Array.Empty<object>(), ["uc"] = Comp.UseCanteen, ["rbn"] = 0, ["hb"] = Comp.HiddenBuildings.ToArray(), ["areas"] = ToAreasSnapshot(),
     };
 
     public void Synchronize(bool settlement = false) => Notify("get_all_area_info_reply", new()
@@ -169,8 +180,24 @@ public sealed class CityLogic(Player player) : PlayerLogicBase(player)
         MarkDirty();
     }
 
-    public bool CanAct(int cost) => cost >= 0 && ActionVal >= cost && Player.WeekNum.Week == 0 && Player.WeekNum.Day < 7 &&
-        Player.WeekNum.EndingId == 0 && !Player.Combat.IsActive && !Player.Status.Emergency && !Comp.EndedActions;
+    public bool CanAct(int cost) => ActionBlocker(cost) is null;
+
+    /// <summary>
+    /// 返回阻止行动的原因，全部满足时为 null。原先 CanAct 只给 bool，调用方无法区分
+    /// “行动力不足”和“已结束行动/紧急状态/战斗中等”，日志里只能看到一个笼统结论。
+    /// </summary>
+    public string? ActionBlocker(int cost)
+    {
+        if (cost < 0) return "行动消耗为负数";
+        if (ActionVal < cost) return $"行动力不足，剩余 {ActionVal}，需要 {cost}";
+        if (Player.WeekNum.Week != 0) return $"非首周（第 {Player.WeekNum.Week} 周目）无法行动";
+        if (Player.WeekNum.Day >= 7) return "本周目已进入第 7 天";
+        if (Player.WeekNum.EndingId != 0) return "结局播放中无法行动";
+        if (Player.Combat.IsActive) return "战斗进行中";
+        if (Player.Status.Emergency) return "紧急状态无法行动";
+        if (Comp.EndedActions) return "今日行动已结束（需跨日或重新登录才恢复）";
+        return null;
+    }
 
     private bool ValidateAreaTeam(int areaId, int cost, int fatigue, int[] heroes, out string? error)
     {
@@ -335,6 +362,42 @@ public sealed class CityLogic(Player player) : PlayerLogicBase(player)
 
     public bool Zhai() => Rest() is not null;
 
+    /// <summary>
+    /// 深夜食堂。客户端 canteenRequest 传入选中的神器使，最多 3 名，
+    /// 每人按 fatigue_recover 的 ext_fatigue_recover 回复疲劳，每天只能用餐一次。
+    /// 客户端没有专门的 reply 方法，靠回调拿结果、靠 syncHeroesData 刷新疲劳动画，
+    /// 因此这里必须推一次 HeroMgr.Synchronize。
+    /// </summary>
+    public Dictionary<string, object> Canteen(int[] heroes, out string? error)
+    {
+        error = null;
+        if (Comp.UseCanteen)
+            error = "深夜食堂今天已经用过了";
+        else if (Player.WeekNum.Week != 0 || Player.WeekNum.Day >= 7 || Player.WeekNum.EndingId != 0)
+            error = "当前不在首周，深夜食堂不可用";
+        else if (Player.Status.Emergency)
+            error = "紧急状态下无法用餐";
+        else if (heroes.Length is < 1 or > 3)
+            error = heroes.Length == 0 ? "请先选择神器使" : "最多选择 3 名神器使";
+        else if (heroes.Distinct().Count() != heroes.Length)
+            error = "不能重复选择同一名神器使";
+        else if (heroes.Any(id => Player.HeroMgr.Find(id) is null || !Player.HeroMgr.AvailableHeroIds.Contains(id)))
+            error = "队伍包含未拥有或当前不可用的神器使";
+        if (error is not null)
+            return new Dictionary<string, object>();
+
+        int amount = GameTableCatalog.Instance.GetDataById<FatigueRecoveryData>(Player.WeekNum.Week)?.Int("ext_fatigue_recover") ?? 25;
+        Dictionary<int, int> before = heroes.ToDictionary(id => id, id => Player.HeroMgr.Find(id)!.Fatigue);
+        foreach (int id in heroes) Player.HeroMgr.AddFatigue(id, amount);
+        Comp.UseCanteen = true;
+        MarkDirty();
+        Player.HeroMgr.Synchronize();
+        Dictionary<string, object> result = new();
+        foreach (int id in heroes)
+            result[id.ToString(CultureInfo.InvariantCulture)] = Player.HeroMgr.Find(id)!.Fatigue - before[id];
+        return result;
+    }
+
     public void PassAreaStage(int areaId, int stageId)
     {
         AreaState? area = FindArea(areaId);
@@ -380,7 +443,11 @@ public sealed class CityLogic(Player player) : PlayerLogicBase(player)
                 if (FindArea(id) is { } area) area.Status = status;
             }
         }
-        foreach (int id in row.Ints("areaLock")) { if (FindArea(id) is { } area) area.Lock = true; }
+        foreach (int id in row.Ints("areaLock"))
+        {
+            if (FindArea(id) is { } area)
+                area.Lock = true;
+        }
         foreach (int id in row.Ints("areaUnlock")) { if (FindArea(id) is { } area) area.Lock = false; }
         foreach (int id in row.Ints("areaCR7")) { if (FindArea(id) is { } area) area.Cr = true; }
         foreach (var pair in row.Map("changeBlackcore")) SetBlackcore(pair.Key, MainlineTable.Number(pair.Value));
@@ -419,11 +486,17 @@ public sealed class CityLogic(Player player) : PlayerLogicBase(player)
     {
         if (row.List("destroyAreaPatrolBuild").Any(value => MainlineTable.Elements(value).Length != 2)) return false;
         foreach (string field in new[] { "areaFree", "areaFight", "areaFall", "areaLock", "areaUnlock", "areaCR7" })
-            if (row.Ints(field).Any(id => FindArea(id) is null)) return false;
+            if (row.Ints(field).Any(id => FindArea(id) is null))
+                return false;
+
         foreach (var pair in row.Map("changeBlackcore"))
-            if (FindArea(pair.Key) is null || MainlineTable.Number(pair.Value, -1) is < 0 or > 2) return false;
+            if (FindArea(pair.Key) is null || MainlineTable.Number(pair.Value, -1) is < 0 or > 2)
+                return false;
+
         foreach (var pair in row.Map("batchChangeBlackcore"))
-            if (pair.Key is < 0 or > 2 || MainlineTable.Number(pair.Value, -1) is < 0 or > 2) return false;
+            if (pair.Key is < 0 or > 2 || MainlineTable.Number(pair.Value, -1) is < 0 or > 2)
+                return false;
+
         foreach (var pair in row.Map("buildBuilding"))
         {
             var values = MainlineTable.Elements(pair.Value);
@@ -497,6 +570,8 @@ public sealed class CityLogic(Player player) : PlayerLogicBase(player)
         Comp.DailyConsumedAction = 0;
         Comp.PatrolNum = 1;
         Comp.EndedActions = false;
+        // 深夜食堂每日一次，跨日恢复资格。
+        Comp.UseCanteen = false;
         FinishPatrol();
         MarkDirty();
     }

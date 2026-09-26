@@ -13,23 +13,12 @@ public sealed class ServerOptions
     public int Port { get => GatewayPort; init => GatewayPort = value; }
 
     public string GatewayPrivateKeyPath { get; init; } = "ServerData/gateway_private.pem";
-    public string PrivateKeyPath { get => GatewayPrivateKeyPath; init => GatewayPrivateKeyPath = value; }
-
     public int GatewayMaxConnections { get; init; } = 32;
-    public int MaxConnections { get => GatewayMaxConnections; init => GatewayMaxConnections = value; }
-
-    public int GatewayMaxFrameBytes { get; init; } = 65536;
-    public int MaxFrameBytes { get => GatewayMaxFrameBytes; init => GatewayMaxFrameBytes = value; }
-
+    public int GatewayMaxFrameBytes { get; init; } = 131072;
     public string TimeZone { get; init; } = "China Standard Time";
     public bool EnableNewbieTutorial { get; init; } = true;
-
     public int GatewayHandshakeSeconds { get; init; } = 30;
-    public int HandshakeSeconds { get => GatewayHandshakeSeconds; init => GatewayHandshakeSeconds = value; }
-
     public int GatewayIdleSeconds { get; init; } = 120;
-    public int IdleSeconds { get => GatewayIdleSeconds; init => GatewayIdleSeconds = value; }
-
     public int HostId { get; init; } = 10003;
     public int ServerId { get; init; } = 5004;
     public string ServerName { get; init; } = "本地测试服";

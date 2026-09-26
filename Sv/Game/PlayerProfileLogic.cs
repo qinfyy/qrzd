@@ -73,6 +73,30 @@ public sealed class PlayerProfileLogic(Player player) : PlayerLogicBase(player)
         }
     }
 
+    /// <summary>
+    /// 策划表 player_exp 的等级上限，200 级封顶。
+    /// </summary>
+    public const int MaxLevel = 200;
+
+    /// <summary>
+    /// 直接设定等级。经验值清零为当前等级起点，避免出现“等级低但经验已满”导致的
+    /// 下一次 AddExperience 立刻连升。反向调整等级时同样不保留旧经验。
+    /// 改完必须走 EventTrigger.Refresh：事件条件 7 读的就是 Profile.Level，
+    /// 不刷新会出现“已达等级但对应事件永不出现”的假死。
+    /// </summary>
+    public int SetLevel(int value)
+    {
+        if (value < 1 || value > MaxLevel)
+            throw new ArgumentOutOfRangeException(nameof(value), $"等级必须为 1..{MaxLevel}");
+        int oldLevel = Level;
+        Level = value;
+        Comp.Experience = 0;
+        MarkDirty();
+        Notify("updateExpAndLevel", new() { ["e"] = Comp.Experience, ["lv"] = Level });
+        if (oldLevel != Level) Player.EventTrigger.Refresh();
+        return oldLevel;
+    }
+
     public int RoleId
     {
         get => Comp.RoleId;

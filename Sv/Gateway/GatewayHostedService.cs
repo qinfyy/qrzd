@@ -30,7 +30,9 @@ public sealed class GatewayHostedService(ILogger<GatewayHostedService> logger) :
 
     public override Task StartAsync(CancellationToken cancellationToken)
     {
+        // 初始化密钥
         AeadTool.InitializeKeys(Config.Server.GatewayPrivateKeyPath);
+        
         _listener.Start(64);
         _listening = true;
         logger.LogInformation("Game Gateway 监听 {Port}，公钥指纹 {Fingerprint}", Config.Server.GatewayPort, AeadTool.Fingerprint);
